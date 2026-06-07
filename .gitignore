@@ -1,0 +1,60 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Python virtual environments and caches
+venv/
+.venv/
+env/
+venv_py314_backup/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Test and coverage artifacts
+.pytest_cache/
+.pytest_tmp/
+.benchmarks/
+mutants/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.scannerwork/
+locust-report.html
+locust_stats*.csv
+scalene-profile*.html
+scalene-profile*.json
+
+# Logs and runtime output
+logs/
+outputs/
+*.log
+
+# Generated data layers
+data/bronze/
+data/silver/
+data/gold/
+data/_pipeline_outputs/
+*.parquet
+
+# Local app/database artifacts
+*.db
+*.duckdb
+*.sqlite
+*.sqlite3
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

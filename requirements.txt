@@ -1,0 +1,56 @@
+# ══════════════════════════════════════════════════════════════════
+# FINTECH PIPELINE — Dependencias
+# Instalar: pip install -r requirements.txt
+# ══════════════════════════════════════════════════════════════════
+
+# ── Pipeline de datos (Bronze / Silver / Gold) ─────────────────────
+pandas>=2.0.0
+pyarrow>=14.0.0
+numpy>=1.26.0
+
+# ── Bus de eventos y APIs HTTP ─────────────────────────────────────
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+requests>=2.31.0
+
+# ── Fuentes y utilidades ───────────────────────────────────────────
+Faker>=19.0.0
+python-dotenv>=1.0.0
+schedule>=1.2.0
+
+# ── Motor SQL en memoria (fallback local para el agente) ───────────
+duckdb>=1.0.0
+
+# ── Agente Inteligente (Strands + Ollama local) ────────────────────
+# El LLM es Ollama corriendo en localhost:11434.
+# Instalar Ollama: https://ollama.com/download
+# Descargar modelo: ollama pull llama3.2
+strands-agents>=0.1.0
+
+# ── Dashboard web ──────────────────────────────────────────────────
+streamlit>=1.32.0
+matplotlib>=3.8.0
+
+# ── AWS S3 (subida de Parquets) ────────────────────────────────────
+boto3>=1.34.0
+
+# ── Databricks (Unity Catalog — catálogo fintech) ──────────────────
+databricks-sql-connector>=3.0.0
+
+# Testing automatizado
+pytest>=9.0.0
+pytest-cov>=7.0.0
+requests-mock>=1.12.0
+moto>=5.0.0
+pytest-xdist>=3.8.0
+pytest-benchmark>=5.2.0
+hypothesis>=6.155.0
+ruff>=0.15.0
+locust>=2.44.0
+scalene>=2.3.0
+
+# E2E / Smoke tests (browser)
+playwright>=1.40.0
+pytest-playwright>=0.4.0
+

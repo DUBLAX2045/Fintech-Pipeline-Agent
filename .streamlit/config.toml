@@ -1,0 +1,13 @@
+[server]
+# No recargar automáticamente al guardar archivos en producción local
+runOnSave = false
+# Desactiva el file watcher (ahorra CPU en Windows)
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+# Cancela reruns anteriores si llega una nueva interacción — reduce esperas
+fastReruns = true
+

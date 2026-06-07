@@ -1,0 +1,163 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:    # permite lanzar manualmente desde GitHub UI
+
+jobs:
+  # ── JOB 1: Tests ─────────────────────────────────────────────────────────
+  test:
+    name: Verificar tests
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Tests unitarios
+        run: pytest tests/unit/ -q --tb=short
+        env:
+          PYTHONPATH: .
+          FINTECH_DASHBOARD_TEST_MODE: "true"
+
+  # ── JOB 2: Build y push al registry ──────────────────────────────────────
+  build-and-push:
+    name: Build y push imagen Docker
+    runs-on: ubuntu-22.04
+    needs: test
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login a Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extraer metadata (tags y labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_USERNAME }}/fintech-pipeline
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build y push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── JOB 3: Deploy al servidor de producción vía SSH ───────────────────────
+  deploy:
+    name: Deploy a producción
+    runs-on: ubuntu-22.04
+    needs: build-and-push
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copiar docker-compose al servidor
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml"
+          target: "/opt/fintech"
+
+      - name: Deploy vía SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /opt/fintech
+
+            # Actualizar .env desde secretos de GitHub Actions
+            cat > .env <<'ENVEOF'
+            OLLAMA_BASE_URL=http://host.docker.internal:11434
+            OLLAMA_MODEL=${{ secrets.OLLAMA_MODEL }}
+            AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            AWS_REGION=${{ secrets.AWS_REGION }}
+            AWS_BUCKET=${{ secrets.AWS_BUCKET }}
+            DATABRICKS_HOST=${{ secrets.DATABRICKS_HOST }}
+            DATABRICKS_TOKEN=${{ secrets.DATABRICKS_TOKEN }}
+            DATABRICKS_HTTP_PATH=${{ secrets.DATABRICKS_HTTP_PATH }}
+            DATABRICKS_CATALOG=${{ secrets.DATABRICKS_CATALOG }}
+            DATABRICKS_SCHEMA=${{ secrets.DATABRICKS_SCHEMA }}
+            EXCHANGE_RATE_API_KEY=${{ secrets.EXCHANGE_RATE_API_KEY }}
+            ENVEOF
+
+            # Bajar imagen nueva del registry
+            docker compose pull dashboard api ecommerce
+
+            # Reiniciar servicios
+            docker compose --profile dashboard  up -d --remove-orphans
+            docker compose --profile api        up -d --remove-orphans
+            docker compose --profile ecommerce  up -d --remove-orphans
+
+            # Esperar health check del dashboard (máx 90 segundos)
+            echo "Esperando que el dashboard arranque..."
+            for i in $(seq 1 18); do
+              if curl -sf http://localhost:8501/_stcore/health > /dev/null 2>&1; then
+                echo "Dashboard OK en intento $i"
+                break
+              fi
+              echo "Intento $i/18 — reintentando en 5s..."
+              sleep 5
+            done
+
+            # Limpiar imágenes antiguas
+            docker image prune -f
+
+      - name: Verificar health post-deploy
+        run: |
+          sleep 10
+          curl -f http://${{ secrets.SSH_HOST }}:8501/_stcore/health || \
+            (echo "Health check FALLÓ — el dashboard no responde" && exit 1)
+          echo "Deploy exitoso. Dashboard respondiendo en http://${{ secrets.SSH_HOST }}:8501"
+
+  # ── JOB 4: Pipeline Gold (solo en workflow_dispatch) ──────────────────────
+  run-pipeline:
+    name: Ejecutar pipeline Gold (manual)
+    runs-on: ubuntu-22.04
+    needs: deploy
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Ejecutar pipeline en servidor
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/fintech
+            echo "Iniciando pipeline Bronze → Silver → Gold..."
+            docker compose --profile pipeline run --rm pipeline
+            echo "Pipeline completado."
+            ls -lh data/gold/

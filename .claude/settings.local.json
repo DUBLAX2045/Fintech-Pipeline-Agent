@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Start-Sleep -Seconds 20; cd \"c:\\\\Users\\\\Alexander\\\\Documents\\\\fintech_pipeline_v3\"; try { $r = Invoke-WebRequest -Uri \"http://localhost:8501/_stcore/health\" -TimeoutSec 10; Write-Host \"Dashboard listo: HTTP $\\($r.StatusCode\\)\" } catch { Write-Host \"No responde aun: $\\($_.Exception.Message\\)\" })"
+    ]
+  }
+}

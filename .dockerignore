@@ -1,0 +1,68 @@
+# ── Entornos virtuales Python ────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Caché Python ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.ruff_cache/
+
+# ── Credenciales y secretos (NUNCA en la imagen) ─────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# ── Tests (no se necesitan en producción) ────────────────────────────────────
+tests/
+.pytest_cache/
+.pytest_tmp/
+.benchmarks/
+mutants/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+locust-report.html
+locust_stats*.csv
+scalene-profile*.html
+
+# ── Datos generados (se montan como volumen en runtime) ───────────────────────
+data/bronze/
+data/silver/
+data/gold/
+data/_pipeline_outputs/
+*.parquet
+*.db
+*.duckdb
+
+# ── Outputs generados en runtime ─────────────────────────────────────────────
+outputs/
+logs/
+
+# ── Documentación y materiales ───────────────────────────────────────────────
+docs/
+Material/
+notebooks/
+
+# ── Git ───────────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.scannerwork/
+
+# ── Editor y SO ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ── Docker (no incluirse a sí mismo) ─────────────────────────────────────────
+Dockerfile
+docker-compose.yml
+.dockerignore

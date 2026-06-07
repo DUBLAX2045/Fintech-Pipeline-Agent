@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test-and-build:
+    name: Tests + Docker build
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: |
+          pip install ruff
+          ruff check src/ tests/ --select E,F,W --ignore E501
+
+      - name: Tests unitarios
+        run: |
+          pytest tests/unit/ -v --tb=short -q
+        env:
+          PYTHONPATH: .
+          FINTECH_DASHBOARD_TEST_MODE: "true"
+
+      - name: Docker build (smoke test)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: fintech-pipeline:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

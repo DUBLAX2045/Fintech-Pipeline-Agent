@@ -1,0 +1,12 @@
+[run]
+source = src
+omit =
+    src/agent/app.py
+    src/agent/run_agent.py
+    src/agent/streamlit_app.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    except \(EOFError, KeyboardInterrupt\):
