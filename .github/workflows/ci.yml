@@ -38,6 +38,9 @@ jobs:
           PYTHONPATH: .
           FINTECH_DASHBOARD_TEST_MODE: "true"
 
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Docker build (smoke test)
         uses: docker/build-push-action@v5
         with:

@@ -295,7 +295,11 @@ jobs:
           PYTHONPATH: .
           FINTECH_DASHBOARD_TEST_MODE: "true"
 
-      # 6. Verificar que la imagen Docker hace build sin errores
+      # 6. Configurar Buildx para soportar cache type=gha
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 7. Verificar que la imagen Docker hace build sin errores
       #    (no la publicamos en CI, solo verificamos que compila)
       - name: Docker build (smoke test)
         uses: docker/build-push-action@v5
