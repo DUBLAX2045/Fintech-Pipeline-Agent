@@ -36,28 +36,28 @@ def ejecutar_pipeline_bronze(
     print("=" * 60)
     print("🚀 INICIANDO PIPELINE — CAPA BRONZE")
     print("=" * 60)
-    
+
     # ── Paso 1: Leer JSON ────────────────────────────────────────────
     print("\n📌 PASO 1: Cargando JSON crudo...")
     eventos = cargar_json(ruta_json)
-    
+
     # ── Paso 2: Aplanar ──────────────────────────────────────────────
     print("\n📌 PASO 2: Aplanando estructura anidada...")
     df = aplanar_todos(eventos)
-    
+
     # ── Paso 3: Metadatos ────────────────────────────────────────────
     print("\n📌 PASO 3: Agregando metadatos de ingesta...")
     nombre_archivo = os.path.basename(ruta_json)
     df = agregar_metadatos_ingesta(df, nombre_archivo)
-    
+
     # ── Paso 4: Duplicados ───────────────────────────────────────────
     print("\n📌 PASO 4: Detectando duplicados...")
     df = detectar_y_registrar_duplicados(df, carpeta_logs, carpeta_bronze=carpeta_bronze)
-    
+
     # ── Paso 5: Guardar ──────────────────────────────────────────────
     print("\n📌 PASO 5: Guardando en formato Parquet...")
     ruta_parquet = guardar_bronze_parquet(df, carpeta_bronze)
-    
+
     # ── Resumen ──────────────────────────────────────────────────────
     print("\n" + "=" * 60)
     print("✅ PIPELINE BRONZE COMPLETADO EXITOSAMENTE")
@@ -65,7 +65,7 @@ def ejecutar_pipeline_bronze(
     print(f"   Columnas totales:   {len(df.columns)}")
     print(f"   Archivo Parquet:    {ruta_parquet}")
     print("=" * 60)
-    
+
     return ruta_parquet
 
 

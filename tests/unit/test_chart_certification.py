@@ -10,15 +10,12 @@ from __future__ import annotations
 
 import re
 import pytest
-import pandas as pd
 
 from src.agent.intent_router import (
     METRICAS_GOLD,
     DIMENSIONES_GOLD,
     NOMBRES_METRICA,
     NOMBRES_DIMENSION,
-    NLP_A_DIMENSION,
-    NLP_A_METRICA,
     extraer_intencion_grafico,
     construir_sql_grafico,
     normalize_text,

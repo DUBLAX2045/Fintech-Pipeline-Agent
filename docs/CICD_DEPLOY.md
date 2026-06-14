@@ -114,8 +114,8 @@ git commit -m "initial commit: fintech pipeline v3"
 # Crea el repo en GitHub (sin README, sin .gitignore, sin licencia)
 # Luego conecta y sube:
 git remote add origin https://github.com/TU_USUARIO/fintech-pipeline-v3.git
-git branch -M main
-git push -u origin main
+git branch -M master
+git push -u origin master
 ```
 
 Verifica que `.gitignore` excluya lo crítico:
@@ -285,7 +285,7 @@ jobs:
       - name: Lint (ruff)
         run: |
           pip install ruff
-          ruff check src/ tests/ --select E,F,W --ignore E501
+          ruff check src/ tests/
 
       # 5. Correr suite completa de tests unitarios
       - name: Tests unitarios
@@ -312,7 +312,7 @@ jobs:
 ```powershell
 # Lint
 pip install ruff
-ruff check src/ tests/ --select E,F,W --ignore E501
+ruff check src/ tests/
 
 # Tests
 .\venv\Scripts\python.exe -m pytest tests/unit/ -v --tb=short

@@ -29,17 +29,17 @@ def agregar_metadatos_ingesta(df: pd.DataFrame, archivo_origen: str) -> pd.DataF
     # (todos los eventos del mismo archivo comparten este lote)
     ahora = datetime.now(timezone.utc)
     batch_id = str(uuid.uuid4())[:8]   # Ejemplo: "a3f8c291"
-    
+
     df = df.copy()  # Buena práctica: no modificar el DataFrame original
-    
+
     df["ingestion_timestamp"] = ahora.isoformat()
     df["source_file"]         = archivo_origen
     df["batch_id"]            = batch_id
     df["ingestion_date"]      = ahora.strftime("%Y-%m-%d")   # Para partición
-    
+
     print("✅ Metadatos agregados:")
     print(f"   batch_id:            {batch_id}")
     print(f"   ingestion_timestamp: {ahora.isoformat()}")
     print(f"   source_file:         {archivo_origen}")
-    
+
     return df

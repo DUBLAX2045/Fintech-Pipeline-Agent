@@ -79,9 +79,9 @@ def redistribuir_fechas(ruta: Path = RUTA_JSON, dias: int = DIAS) -> None:
     fin    = fechas[-1].date()
     print(f"✅ {cambiados:,} timestamps redistribuidos")
     print(f"   Rango: {inicio} → {fin} ({dias} días)")
-    print(f"   Días hábiles con ~4× más volumen que fines de semana")
-    print(f"\nAhora ejecuta el pipeline completo:")
-    print(f"   python src/run_pipeline.py")
+    print("   Días hábiles con ~4× más volumen que fines de semana")
+    print("\nAhora ejecuta el pipeline completo:")
+    print("   python src/run_pipeline.py")
 
 
 if __name__ == "__main__":

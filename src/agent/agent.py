@@ -105,7 +105,8 @@ def _subir_a_docker(ruta_local: str) -> None:
 
 def _chart_to_base64() -> str:
     """Captura el gráfico activo de matplotlib como PNG base64 (para HTML embebido)."""
-    import io, base64
+    import io
+    import base64
     buf = io.BytesIO()
     plt.tight_layout()
     plt.savefig(buf, format="png", dpi=150, bbox_inches="tight")
@@ -957,8 +958,6 @@ def generar_reporte_html() -> str:
     El archivo se guarda en outputs/reports/ y no requiere conexión a internet.
     Retorna la ruta del archivo HTML generado.
     """
-    import io as _io
-    import base64 as _b64
 
     conn = _get_conn_duckdb()
     fecha_str = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -1442,10 +1441,6 @@ def _validar_sql_grafico(sql: str, pregunta: str) -> str:
         )
 
     # ── Corrección 2: IS NOT NULL para columnas categóricas nullable ─────────
-    cols_nullable = [
-        col for col, (col_sql, where) in DIMENSIONES_GOLD.items()
-        if where  # solo las que tienen filtro definido
-    ]
     col_sqls_nullable = {
         col_sql
         for _, (col_sql, where) in DIMENSIONES_GOLD.items()

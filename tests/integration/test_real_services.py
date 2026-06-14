@@ -24,13 +24,13 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from dotenv import load_dotenv as _load_dotenv
 
 ROOT = Path(__file__).resolve().parents[2]
 
 pytestmark = pytest.mark.cloud
 
 # Cargar .env al inicio del módulo para que los skipif puedan leer las variables
-from dotenv import load_dotenv as _load_dotenv
 _load_dotenv(ROOT / ".env")
 
 
@@ -578,7 +578,8 @@ def test_verificar_cloud_script_exits_zero():
     verificar_cloud.py debe terminar con exit code 0, indicando que
     todos los servicios externos están operativos.
     """
-    import importlib.util, sys
+    import importlib.util
+    import sys
 
     spec = importlib.util.spec_from_file_location(
         "verificar_cloud", ROOT / "scripts" / "verificar_cloud.py"

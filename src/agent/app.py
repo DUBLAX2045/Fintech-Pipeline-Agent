@@ -19,12 +19,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import os
+import re as _re
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-import plotly.express as px
 import streamlit as st
 import requests
 from src.io.parquet_io import resolve_latest_parquet
@@ -489,8 +489,6 @@ COLOR_MUTED     = "#64748b"
 OLLAMA_URL      = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2")
 
-
-import re as _re
 
 def _render_agent_response(texto: str) -> None:
     """

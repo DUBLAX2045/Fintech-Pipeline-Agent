@@ -57,7 +57,7 @@ def generar_evento_ecommerce() -> dict:
     monto = random.randint(5000, 2000000)       # Entre $5.000 y $2.000.000 COP
     balance_antes = random.randint(50000, 5000000)
     balance_despues = max(0, balance_antes - monto)
-    
+
     evento = {
         "source": "ecommerce.app",              # ← Distingue del fintech original
         "detailType": "event",
@@ -99,7 +99,7 @@ def generar_evento_ecommerce() -> dict:
             }
         }
     }
-    
+
     return evento
 
 
@@ -126,34 +126,34 @@ def ejecutar_simulador(
     print(f"   Intervalo:         cada {intervalo_segundos} segundos")
     print(f"   Destino:           {carpeta_bronze}")
     print("   (Ctrl+C para detener)\n")
-    
+
     lote_num = 0
-    
+
     try:
         while True:
             lote_num += 1
             print(f"\n⏱️  Lote #{lote_num} — {datetime.now().strftime('%H:%M:%S')}")
-            
+
             # Generar eventos nuevos
             nuevos_eventos = [generar_evento_ecommerce() for _ in range(eventos_por_lote)]
-            
+
             # Procesar a través del pipeline Bronze
             df = aplanar_todos(nuevos_eventos)
             df = agregar_metadatos_ingesta(df, f"ecommerce_simulator_lote_{lote_num}")
             df = detectar_y_registrar_duplicados(df, carpeta_bronze=carpeta_bronze)
             ruta = guardar_bronze_parquet(df, carpeta_bronze)
-            
+
             print(f"   ✅ {eventos_por_lote} eventos procesados → {ruta}")
-            
+
             # Verificar límite de lotes
             if max_lotes and lote_num >= max_lotes:
                 print(f"\n✅ Límite de {max_lotes} lotes alcanzado. Simulador detenido.")
                 break
-            
+
             # Esperar hasta el siguiente lote
             print(f"   💤 Esperando {intervalo_segundos}s para el próximo lote...")
             time.sleep(intervalo_segundos)
-    
+
     except KeyboardInterrupt:
         print("\n\n⛔ Simulador detenido por el usuario.")
         print(f"   Total de lotes procesados: {lote_num}")
