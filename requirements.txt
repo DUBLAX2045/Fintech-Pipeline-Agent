@@ -31,6 +31,7 @@ strands-agents>=0.1.0
 # ── Dashboard web ──────────────────────────────────────────────────
 streamlit>=1.32.0
 matplotlib>=3.8.0
+plotly>=5.20.0
 
 # ── AWS S3 (subida de Parquets) ────────────────────────────────────
 boto3>=1.34.0
