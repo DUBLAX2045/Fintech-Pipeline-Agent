@@ -89,11 +89,27 @@ Ruta:
 GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret
 ```
 
+Usa la pestaña `Secrets`, no `Variables`.
+
 Para Windows local solo necesitas:
 
 ```text
 DOCKER_USERNAME = tu usuario de Docker Hub
 DOCKER_PASSWORD = token de Docker Hub, no tu contrasena
+```
+
+Los nombres deben ser exactamente esos:
+
+```text
+DOCKER_USERNAME
+DOCKER_PASSWORD
+```
+
+Si los creas como `DOCKERHUB_USERNAME`, `DOCKER_TOKEN`, en otro repositorio, o
+en la pestaña `Variables`, el workflow no los encontrara y Docker mostrara:
+
+```text
+Error: Username and password required
 ```
 
 No necesitas estos secretos para Windows local:
@@ -724,6 +740,17 @@ Y el workflow debe tener:
 runs-on: [self-hosted, Windows]
 ```
 
+### Error `pwsh: command not found`
+
+`pwsh` es PowerShell 7. Muchos Windows tienen solo Windows PowerShell clasico,
+cuyo ejecutable es `powershell`.
+
+Este proyecto usa `shell: powershell` en el deploy Windows para no obligarte a
+instalar PowerShell 7.
+
+Si prefieres usar `pwsh`, instala PowerShell 7 y asegurate de que quede en el
+PATH del usuario que ejecuta el runner.
+
 ### Falta el .env
 
 El CD falla si no existe:
@@ -767,6 +794,16 @@ DOCKER_PASSWORD
 ```
 
 `DOCKER_PASSWORD` debe ser token de Docker Hub, no tu contrasena normal.
+
+Tambien revisa:
+
+```text
+1. Que esten en Repository secrets, no en Variables.
+2. Que esten en el mismo repositorio donde corre Actions.
+3. Que los nombres sean exactamente DOCKER_USERNAME y DOCKER_PASSWORD.
+4. Que DOCKER_USERNAME sea tu usuario de Docker Hub, no tu email.
+5. Que DOCKER_PASSWORD sea un Access Token vigente de Docker Hub.
+```
 
 ---
 
