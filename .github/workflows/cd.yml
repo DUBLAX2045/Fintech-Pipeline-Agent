@@ -180,6 +180,26 @@ jobs:
           }
           docker tag $remoteImage "${{ env.LOCAL_IMAGE }}"
 
+      - name: Limpiar contenedores anteriores
+        shell: powershell
+        run: |
+          $containers = @(
+            "fintech-dashboard",
+            "fintech-api",
+            "fintech-ecommerce"
+          )
+
+          foreach ($name in $containers) {
+            $existing = docker ps -a --filter "name=^/$name$" --format "{{.Names}}"
+            if ($existing -eq $name) {
+              Write-Host "Eliminando contenedor anterior: $name"
+              docker rm -f $name
+              if ($LASTEXITCODE -ne 0) {
+                throw "No se pudo eliminar el contenedor anterior $name."
+              }
+            }
+          }
+
       - name: Recrear servicios Windows
         shell: powershell
         working-directory: ${{ env.DEPLOY_DIR }}

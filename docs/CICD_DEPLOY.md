@@ -776,6 +776,28 @@ Usa ambos perfiles:
 docker compose --profile api --profile ecommerce up -d api ecommerce
 ```
 
+### Conflict: container name already in use
+
+Significa que ya existe un contenedor con ese nombre, por ejemplo:
+
+```text
+fintech-dashboard
+fintech-api
+fintech-ecommerce
+```
+
+Docker no permite dos contenedores con el mismo nombre global aunque vengan de
+carpetas distintas. El CD Windows ya elimina esos contenedores antes de
+recrearlos.
+
+Solucion manual:
+
+```powershell
+docker rm -f fintech-dashboard fintech-api fintech-ecommerce
+docker compose --profile dashboard up -d --force-recreate dashboard
+docker compose --profile api --profile ecommerce up -d --force-recreate api ecommerce
+```
+
 ### Dashboard no responde
 
 Revisa:
