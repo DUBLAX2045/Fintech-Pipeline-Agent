@@ -97,19 +97,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Login local a Docker Hub
+      - name: Preflight Windows local
         shell: powershell
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
-          if (-not $env:DOCKER_USERNAME) {
-            throw "Falta el secret DOCKER_USERNAME en GitHub Actions."
+          docker --version
+          docker compose version
+
+          $deployDir = "${{ env.DEPLOY_DIR }}"
+          if (-not (Test-Path $deployDir)) {
+            New-Item -ItemType Directory -Force $deployDir | Out-Null
           }
-          if (-not $env:DOCKER_PASSWORD) {
-            throw "Falta el secret DOCKER_PASSWORD en GitHub Actions."
+
+          if (-not (Test-Path "$deployDir\.env")) {
+            throw "Falta $deployDir\.env. Copia tu .env local a esa ruta antes de ejecutar CD."
           }
-          $env:DOCKER_PASSWORD | docker login -u $env:DOCKER_USERNAME --password-stdin
 
       - name: Preparar carpeta de despliegue
         shell: powershell
@@ -129,15 +130,54 @@ jobs:
             Copy-Item -Path "data\raw\*" -Destination "$deployDir\data\raw" -Recurse -Force
           }
 
-          if (-not (Test-Path "$deployDir\.env")) {
-            throw "Falta $deployDir\.env. Copia tu .env local a esa ruta antes de ejecutar CD."
-          }
+          docker compose --project-directory $deployDir --profile dashboard --profile api --profile ecommerce config --services
 
       - name: Descargar imagen publicada
         shell: powershell
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
           $remoteImage = "${{ env.IMAGE_NAME }}:latest"
           docker pull $remoteImage
+          if ($LASTEXITCODE -ne 0) {
+            if (-not $env:DOCKER_USERNAME) {
+              throw "Falta el secret DOCKER_USERNAME en GitHub Actions."
+            }
+            if (-not $env:DOCKER_PASSWORD) {
+              throw "Falta el secret DOCKER_PASSWORD en GitHub Actions."
+            }
+
+            Write-Host "Pull sin login fallo. Intentando login local a Docker Hub..."
+            $psi = New-Object System.Diagnostics.ProcessStartInfo
+            $psi.FileName = "docker"
+            $psi.Arguments = "login -u `"$env:DOCKER_USERNAME`" --password-stdin"
+            $psi.RedirectStandardInput = $true
+            $psi.RedirectStandardOutput = $true
+            $psi.RedirectStandardError = $true
+            $psi.UseShellExecute = $false
+
+            $process = New-Object System.Diagnostics.Process
+            $process.StartInfo = $psi
+            [void] $process.Start()
+            $process.StandardInput.WriteLine($env:DOCKER_PASSWORD)
+            $process.StandardInput.Close()
+            $stdout = $process.StandardOutput.ReadToEnd()
+            $stderr = $process.StandardError.ReadToEnd()
+            $process.WaitForExit()
+
+            if ($process.ExitCode -ne 0) {
+              Write-Host $stdout
+              Write-Error $stderr
+              exit $process.ExitCode
+            }
+
+            Write-Host $stdout
+            docker pull $remoteImage
+            if ($LASTEXITCODE -ne 0) {
+              throw "No se pudo descargar $remoteImage despues del login."
+            }
+          }
           docker tag $remoteImage "${{ env.LOCAL_IMAGE }}"
 
       - name: Recrear servicios Windows

@@ -311,7 +311,9 @@ Job 2 - build-and-push
 
 Job 3 - deploy-windows
   Corre en tu Windows self-hosted runner.
+  Verifica Docker Desktop y C:\fintech_pipeline_deploy\.env.
   Hace docker pull de la imagen latest.
+  Si la imagen no es publica, intenta login local a Docker Hub.
   La etiqueta como fintech-pipeline:latest.
   Recrea dashboard, api y ecommerce.
   Valida health local.
@@ -803,6 +805,27 @@ Tambien revisa:
 3. Que los nombres sean exactamente DOCKER_USERNAME y DOCKER_PASSWORD.
 4. Que DOCKER_USERNAME sea tu usuario de Docker Hub, no tu email.
 5. Que DOCKER_PASSWORD sea un Access Token vigente de Docker Hub.
+```
+
+En el deploy Windows el workflow intenta primero:
+
+```powershell
+docker pull DOCKER_USERNAME/fintech-pipeline:latest
+```
+
+Si tu repositorio de Docker Hub es publico, no deberia necesitar login local.
+Si es privado, el workflow intentara login local despues del primer pull fallido.
+
+Si el login local sigue fallando pero el build/push en GitHub pasa, prueba una
+de estas dos rutas:
+
+```text
+Ruta simple para demo:
+  Deja el repositorio Docker Hub como publico.
+
+Ruta privada:
+  Ejecuta docker login manualmente en el mismo Windows donde corre el runner.
+  Usa el usuario de Docker Hub y el mismo Access Token.
 ```
 
 ---
