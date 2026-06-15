@@ -374,7 +374,7 @@ docker compose --profile api up -d api
 curl http://localhost:8000/docs
 
 # Generador de eventos (puerto 8001)
-docker compose --profile ecommerce up -d ecommerce
+docker compose --profile api --profile ecommerce up -d api ecommerce
 curl http://localhost:8001/docs
 ```
 

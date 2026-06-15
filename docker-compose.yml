@@ -5,6 +5,7 @@
 #   docker compose --profile pipeline  up pipeline    # Bronze→Silver→Gold
 #   docker compose --profile dashboard up -d          # Dashboard Streamlit
 #   docker compose --profile api       up -d          # API receptor eventos
+#   docker compose --profile api --profile ecommerce up -d api ecommerce  # APIs completas
 #   docker compose --profile bus       up -d          # Bus streaming completo
 #
 # IMPORTANTE: Ollama corre en el HOST (no en Docker).
@@ -137,7 +138,7 @@ services:
       - api
 
   # ── API generadora de eventos (puerto 8001) ───────────────────────────────────
-  # Uso: docker compose --profile ecommerce up -d ecommerce
+  # Uso: docker compose --profile api --profile ecommerce up -d api ecommerce
   # Swagger: http://localhost:8001/docs
   ecommerce:
     build:

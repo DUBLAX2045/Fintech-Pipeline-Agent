@@ -2,11 +2,21 @@ name: CD
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:    # permite lanzar manualmente desde GitHub UI
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      run_pipeline:
+        description: "Ejecutar pipeline batch despues del deploy"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/fintech-pipeline
+  LOCAL_IMAGE: fintech-pipeline:latest
+  DEPLOY_DIR: C:\fintech_pipeline_deploy
 
 jobs:
-  # ── JOB 1: Tests ─────────────────────────────────────────────────────────
   test:
     name: Verificar tests
     runs-on: ubuntu-22.04
@@ -28,14 +38,10 @@ jobs:
           PYTHONPATH: .
           FINTECH_DASHBOARD_TEST_MODE: "true"
 
-  # ── JOB 2: Build y push al registry ──────────────────────────────────────
   build-and-push:
     name: Build y push imagen Docker
     runs-on: ubuntu-22.04
     needs: test
-
-    outputs:
-      image_tag: ${{ steps.meta.outputs.tags }}
 
     steps:
       - uses: actions/checkout@v4
@@ -46,11 +52,11 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extraer metadata (tags y labels)
+      - name: Extraer metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/fintech-pipeline
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=latest
@@ -68,96 +74,94 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── JOB 3: Deploy al servidor de producción vía SSH ───────────────────────
-  deploy:
-    name: Deploy a producción
-    runs-on: ubuntu-22.04
+  deploy-windows:
+    name: Deploy Windows local
+    runs-on: [self-hosted, Windows]
     needs: build-and-push
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copiar docker-compose al servidor
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.yml"
-          target: "/opt/fintech"
-
-      - name: Deploy vía SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -e
-            cd /opt/fintech
-
-            # Actualizar .env desde secretos de GitHub Actions
-            cat > .env <<'ENVEOF'
-            OLLAMA_BASE_URL=http://host.docker.internal:11434
-            OLLAMA_MODEL=${{ secrets.OLLAMA_MODEL }}
-            AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-            AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-            AWS_REGION=${{ secrets.AWS_REGION }}
-            AWS_BUCKET=${{ secrets.AWS_BUCKET }}
-            DATABRICKS_HOST=${{ secrets.DATABRICKS_HOST }}
-            DATABRICKS_TOKEN=${{ secrets.DATABRICKS_TOKEN }}
-            DATABRICKS_HTTP_PATH=${{ secrets.DATABRICKS_HTTP_PATH }}
-            DATABRICKS_CATALOG=${{ secrets.DATABRICKS_CATALOG }}
-            DATABRICKS_SCHEMA=${{ secrets.DATABRICKS_SCHEMA }}
-            EXCHANGE_RATE_API_KEY=${{ secrets.EXCHANGE_RATE_API_KEY }}
-            ENVEOF
-
-            # Bajar imagen nueva del registry
-            docker compose pull dashboard api ecommerce
-
-            # Reiniciar servicios
-            docker compose --profile dashboard  up -d --remove-orphans
-            docker compose --profile api        up -d --remove-orphans
-            docker compose --profile ecommerce  up -d --remove-orphans
-
-            # Esperar health check del dashboard (máx 90 segundos)
-            echo "Esperando que el dashboard arranque..."
-            for i in $(seq 1 18); do
-              if curl -sf http://localhost:8501/_stcore/health > /dev/null 2>&1; then
-                echo "Dashboard OK en intento $i"
-                break
-              fi
-              echo "Intento $i/18 — reintentando en 5s..."
-              sleep 5
-            done
-
-            # Limpiar imágenes antiguas
-            docker image prune -f
-
-      - name: Verificar health post-deploy
+      - name: Login local a Docker Hub
+        shell: pwsh
+        env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
-          sleep 10
-          curl -f http://${{ secrets.SSH_HOST }}:8501/_stcore/health || \
-            (echo "Health check FALLÓ — el dashboard no responde" && exit 1)
-          echo "Deploy exitoso. Dashboard respondiendo en http://${{ secrets.SSH_HOST }}:8501"
+          $env:DOCKER_PASSWORD | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-  # ── JOB 4: Pipeline Gold (solo en workflow_dispatch) ──────────────────────
-  run-pipeline:
-    name: Ejecutar pipeline Gold (manual)
-    runs-on: ubuntu-22.04
-    needs: deploy
-    if: github.event_name == 'workflow_dispatch'
+      - name: Preparar carpeta de despliegue
+        shell: pwsh
+        run: |
+          $deployDir = "${{ env.DEPLOY_DIR }}"
+          New-Item -ItemType Directory -Force $deployDir | Out-Null
+          New-Item -ItemType Directory -Force "$deployDir\data\raw" | Out-Null
+          New-Item -ItemType Directory -Force "$deployDir\data\bronze" | Out-Null
+          New-Item -ItemType Directory -Force "$deployDir\data\silver" | Out-Null
+          New-Item -ItemType Directory -Force "$deployDir\data\gold" | Out-Null
+          New-Item -ItemType Directory -Force "$deployDir\outputs\charts" | Out-Null
+          New-Item -ItemType Directory -Force "$deployDir\outputs\reports" | Out-Null
+          New-Item -ItemType Directory -Force "$deployDir\logs" | Out-Null
+
+          Copy-Item -Path "docker-compose.yml" -Destination "$deployDir\docker-compose.yml" -Force
+          if (Test-Path "data\raw") {
+            Copy-Item -Path "data\raw\*" -Destination "$deployDir\data\raw" -Recurse -Force
+          }
+
+          if (-not (Test-Path "$deployDir\.env")) {
+            throw "Falta $deployDir\.env. Copia tu .env local a esa ruta antes de ejecutar CD."
+          }
+
+      - name: Descargar imagen publicada
+        shell: pwsh
+        run: |
+          $remoteImage = "${{ env.IMAGE_NAME }}:latest"
+          docker pull $remoteImage
+          docker tag $remoteImage "${{ env.LOCAL_IMAGE }}"
+
+      - name: Recrear servicios Windows
+        shell: pwsh
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          docker compose --profile dashboard up -d --force-recreate --no-build dashboard
+          docker compose --profile api --profile ecommerce up -d --force-recreate --no-build api ecommerce
+
+      - name: Health check local
+        shell: pwsh
+        run: |
+          $ok = $false
+          for ($i = 1; $i -le 18; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8501/_stcore/health" -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                $ok = $true
+                break
+              }
+            } catch {
+              Start-Sleep -Seconds 5
+            }
+          }
+          if (-not $ok) {
+            docker ps
+            docker compose --project-directory "${{ env.DEPLOY_DIR }}" logs --tail=80 dashboard
+            throw "El dashboard no respondio el health check local."
+          }
+          Write-Host "Dashboard OK: http://127.0.0.1:8501"
+
+      - name: Mostrar contenedores
+        shell: pwsh
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: docker compose ps
+
+  run-pipeline-windows:
+    name: Ejecutar pipeline Gold Windows
+    runs-on: [self-hosted, Windows]
+    needs: deploy-windows
+    if: github.event_name == 'workflow_dispatch' && inputs.run_pipeline == true
 
     steps:
-      - name: Ejecutar pipeline en servidor
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /opt/fintech
-            echo "Iniciando pipeline Bronze → Silver → Gold..."
-            docker compose --profile pipeline run --rm pipeline
-            echo "Pipeline completado."
-            ls -lh data/gold/
+      - name: Ejecutar pipeline batch
+        shell: pwsh
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          docker compose --profile pipeline run --rm --no-build pipeline
+          docker compose ps
