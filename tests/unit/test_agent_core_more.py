@@ -44,20 +44,39 @@ class _StaticConn:
 def test_text_helpers_and_ollama_health(requests_mock, monkeypatch):
     monkeypatch.setattr(agent_module, "OLLAMA_BASE_URL", "http://ollama.local")
     monkeypatch.setattr(agent_module, "OLLAMA_MODEL", "llama3.2")
+    monkeypatch.setattr(agent_module.time, "sleep", lambda _: None)
 
     assert agent_module._normalizar_texto("  M\u00e9trica \u00c1gil  ") == "metrica agil"
+    assert agent_module._slug_archivo_seguro("Análisis para Campañas / Bogotá") == (
+        "analisis_para_campanas_bogota"
+    )
 
     requests_mock.get(
         "http://ollama.local/api/tags",
         json={"models": [{"name": "llama3.2:latest"}]},
     )
-    assert agent_module._verificar_ollama() is True
+    assert agent_module._verificar_ollama(intentos=1) is True
 
     requests_mock.get("http://ollama.local/api/tags", status_code=503)
-    assert agent_module._verificar_ollama() is False
+    assert agent_module._verificar_ollama(intentos=1) is False
 
     requests_mock.get("http://ollama.local/api/tags", exc=requests.ConnectionError)
-    assert agent_module._verificar_ollama() is False
+    assert agent_module._verificar_ollama(intentos=1) is False
+
+
+def test_verificar_ollama_retries_transient_failure(requests_mock, monkeypatch):
+    monkeypatch.setattr(agent_module, "OLLAMA_BASE_URL", "http://ollama.local")
+    monkeypatch.setattr(agent_module, "OLLAMA_MODEL", "llama3.2")
+    monkeypatch.setattr(agent_module.time, "sleep", lambda _: None)
+    requests_mock.get(
+        "http://ollama.local/api/tags",
+        [
+            {"status_code": 503},
+            {"json": {"models": [{"name": "llama3.2:latest"}]}},
+        ],
+    )
+
+    assert agent_module._verificar_ollama(intentos=2) is True
 
 
 @pytest.mark.parametrize(
@@ -122,6 +141,464 @@ def test_respuesta_desde_sql_and_tool_parser(monkeypatch):
 
     assert "fila real" in response
     assert agent_module._extraer_tool_call("sin json") is None
+
+
+def test_modo_respuesta_claro_changes_ollama_prompt(requests_mock, monkeypatch):
+    monkeypatch.setattr(agent_module, "OLLAMA_BASE_URL", "http://ollama.local")
+    monkeypatch.setattr(agent_module, "OLLAMA_MODEL", "llama3.2")
+    monkeypatch.setattr(agent_module, "_verificar_ollama", lambda: True)
+    requests_mock.post(
+        "http://ollama.local/api/chat",
+        json={"message": {"content": "**Resumen Ejecutivo**\nExplicación simple."}},
+    )
+
+    response = agent_module._interpretar_con_ollama(
+        "Dame el resumen ejecutivo",
+        "usuarios 489\nvolumen 211300000",
+        modo_respuesta="claro",
+    )
+    payload = requests_mock.last_request.json()
+
+    assert agent_module.normalizar_modo_respuesta("persona natural") == "claro"
+    assert "NO son expertas" in payload["messages"][0]["content"]
+    assert "ejemplos cotidianos" in payload["messages"][-1]["content"]
+    assert "explicación clara" in response
+
+
+def test_grafico_contexto_deterministico_corrige_minimo_y_tipo(monkeypatch, tmp_path):
+    monkeypatch.setattr(agent_module, "_get_charts_dir", lambda: tmp_path)
+    monkeypatch.setattr(agent_module, "_verificar_ollama", lambda: False)
+    monkeypatch.setattr(agent_module, "_periodo_gold_global", lambda: "2026-04-30 a 2026-06-03")
+    df = pd.DataFrame(
+        {
+            "city": ["Bogotá", "Cartagena", "Barranquilla", "Medellín", "Cali"],
+            "revenue_por_usuario": [483785.0, 442937.0, 421751.0, 417489.0, 402195.0],
+        }
+    )
+
+    response = agent_module._ejecutar_grafico_con_analisis(
+        df,
+        "Revenue por Ciudad",
+        "line",
+        "Me puedes generar un grafico de lineas de los tickets por ciudad",
+        "claro",
+    )
+
+    assert "Datos usados para responder" in response
+    assert "Verificacion simple de los datos" in response
+    assert "dinero promedio movido por persona" in response
+    assert "Bogotá" in response
+    assert "Cali" in response
+    assert "Analisis por datos" in response
+    assert "Conclusion" in response
+    assert "Recomendacion" in response
+    contexto = agent_module._contexto_estructurado_actual()
+    assert contexto is not None
+    assert contexto["tipo_usado"] == "bar"
+
+
+def test_grafico_reemplaza_ollama_contradictorio_por_control_deterministico(monkeypatch, tmp_path):
+    monkeypatch.setattr(agent_module, "_get_charts_dir", lambda: tmp_path)
+    monkeypatch.setattr(agent_module, "_periodo_gold_global", lambda: "2026-04-30 a 2026-06-03")
+    monkeypatch.setattr(
+        agent_module,
+        "_analizar_grafico_con_ollama",
+        lambda *args, **kwargs: (
+            "**Analisis por datos**\n"
+            "La tasa de fallo tiene como menor valor a Bogotá y como mayor valor a Cali. "
+            "Este texto es deliberadamente largo para simular una respuesta completa de Ollama. "
+            "Repite una lectura de negocio suficiente para pasar el umbral de longitud, pero contradice "
+            "los hechos validados por codigo en la metrica de tasa de fallo. "
+            "**Conclusion**\n"
+            "La ciudad con mejor comportamiento seria Bogotá, aunque el dato real dice otra cosa. "
+            "Este bloque mantiene extension adicional para evitar que la validacion lo descarte por corto. "
+            "**Recomendacion**\n"
+            "Invertir en Bogotá por menor friccion, recomendacion que debe ser reemplazada por control."
+        ),
+    )
+    df = pd.DataFrame(
+        {
+            "city": ["Bogotá", "Medellín", "Cali"],
+            "tasa_fallo_pct": [27.3, 19.6, 23.9],
+            "usuarios": [81, 121, 81],
+        }
+    )
+
+    response = agent_module._ejecutar_grafico_con_analisis(
+        df,
+        "Potencial de crecimiento por ciudad",
+        "pie",
+        "Que ciudad tiene mayor potencial de crecimiento?",
+        "claro",
+    )
+
+    assert "Respuesta en lenguaje claro" in response
+    assert "porcentaje de operaciones con problemas" in response
+    assert "Bogotá" in response
+    assert "Medellín" in response
+    assert "Invertir en Bogotá por menor friccion" not in response
+
+
+def test_grafico_respaldo_deterministico_cuando_ollama_responde_corto(monkeypatch, tmp_path):
+    monkeypatch.setattr(agent_module, "_get_charts_dir", lambda: tmp_path)
+    monkeypatch.setattr(agent_module, "_periodo_gold_global", lambda: "2026-04-30 a 2026-06-03")
+    monkeypatch.setattr(agent_module, "_analizar_grafico_con_ollama", lambda *args, **kwargs: "Respuesta corta")
+    df = pd.DataFrame(
+        {
+            "user_segment": ["student", "family"],
+            "usuarios": [146, 108],
+            "inactivos": [34, 20],
+        }
+    )
+
+    response = agent_module._ejecutar_grafico_con_analisis(
+        df,
+        "Analisis para Estrategia de Campanas por Segmento",
+        "pie",
+        "Que campana lanzarias este mes?",
+        "claro",
+    )
+
+    assert "Analisis por datos" in response
+    assert "reactivacion para estudiantes" in response
+    assert "personas que llevan tiempo sin usar la plataforma" in response
+    assert "Respuesta corta" not in response
+
+
+def test_agent_query_prioriza_seguimiento_contextual_sobre_grafico(monkeypatch):
+    agent_module.reset_agent()
+    agent_module._actualizar_contexto_estructurado(
+        {
+            "tipo": "grafico",
+            "titulo": "Revenue por Ciudad",
+            "pregunta": "grafico de tickets por ciudad",
+            "datos_texto": "city revenue_por_usuario\nBogotá 483785\nCali 402195",
+            "hechos_texto": "- Métrica principal 'revenue_por_usuario': mínimo Cali = 402,195.",
+        }
+    )
+    monkeypatch.setattr(agent_module, "_verificar_ollama", lambda: False)
+    monkeypatch.setattr(
+        agent_module,
+        "_manejar_peticion_grafico",
+        lambda pregunta, modo_respuesta="profesional": "NO_DEBE_GRAFICAR",
+    )
+
+    response = agent_module.agent_query(
+        "oye pero te estas equivocando, esta grafica indica que el valor mas bajo es Cali; "
+        "estos valores desde que tiempos salen?",
+        modo_respuesta="claro",
+    )
+
+    assert "Retomando la respuesta anterior" in response
+    assert "mínimo Cali" in response
+    assert "NO_DEBE_GRAFICAR" not in response
+
+
+def test_agent_query_elabora_recomendaciones_sin_repetir_formato(monkeypatch):
+    agent_module.reset_agent()
+    agent_module._actualizar_contexto_estructurado(
+        {
+            "tipo": "grafico",
+            "titulo": "Analisis para Estrategia de Campanas por Segmento",
+            "pregunta": "Que campana lanzarias este mes?",
+            "datos_texto": "segmento usuarios inactivos tasa_fallo revenue",
+            "hechos_texto": "- Respuesta basada en segmentos Gold.",
+            "metricas": [
+                {
+                    "columna": "inactivos",
+                    "nombre": "usuarios inactivos",
+                    "max_label": "student",
+                    "min_label": "young_professional",
+                    "max_val": 34,
+                    "min_val": 19,
+                    "brecha": 15,
+                    "brecha_txt": "78.9% sobre el mínimo",
+                },
+                {
+                    "columna": "tasa_fallo_pct",
+                    "nombre": "tasa de fallo",
+                    "max_label": "family",
+                    "min_label": "premium",
+                    "max_val": 26.9,
+                    "min_val": 16.4,
+                    "brecha": 10.5,
+                    "brecha_txt": "64.0% sobre el mínimo",
+                },
+                {
+                    "columna": "revenue_por_usuario",
+                    "nombre": "revenue por usuario",
+                    "max_label": "young_professional",
+                    "min_label": "student",
+                    "max_val": 439775,
+                    "min_val": 422550,
+                    "brecha": 17225,
+                    "brecha_txt": "4.1% sobre el mínimo",
+                },
+            ],
+        }
+    )
+    monkeypatch.setattr(agent_module, "_verificar_ollama", lambda: False)
+    monkeypatch.setattr(
+        agent_module,
+        "_respuesta_datos_confiable",
+        lambda *args, **kwargs: "NO_DEBE_REPETIR_ANALISIS",
+    )
+
+    response = agent_module.agent_query(
+        "oye, a partir de esas recomendaciones dame 3 ideas especificas bien ejecutadas",
+        modo_respuesta="claro",
+    )
+
+    assert "Campaña `Vuelve y gana`" in response
+    assert "Campaña `Operación sin fricción`" in response
+    assert "Campaña `Más valor por uso frecuente`" in response
+    assert "estudiantes" in response
+    assert "NO_DEBE_REPETIR_ANALISIS" not in response
+    assert "Analisis por datos" not in response
+
+
+def test_seguimiento_elaboracion_descarta_formato_repetido_de_ollama(monkeypatch, requests_mock):
+    agent_module.reset_agent()
+    agent_module._actualizar_contexto_estructurado(
+        {
+            "tipo": "grafico",
+            "titulo": "Analisis para Estrategia de Campanas por Segmento",
+            "pregunta": "Que campana lanzarias este mes?",
+            "datos_texto": "segmento usuarios inactivos",
+            "hechos_texto": "- Usuarios inactivos: máximo student = 34.",
+            "metricas": [
+                {
+                    "columna": "inactivos",
+                    "nombre": "usuarios inactivos",
+                    "max_label": "student",
+                    "min_label": "young_professional",
+                    "max_val": 34,
+                    "min_val": 19,
+                    "brecha": 15,
+                    "brecha_txt": "78.9% sobre el mínimo",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(agent_module, "OLLAMA_BASE_URL", "http://ollama.local")
+    monkeypatch.setattr(agent_module, "_verificar_ollama", lambda: True)
+    requests_mock.post(
+        "http://ollama.local/api/chat",
+        json={"message": {"content": "Verificacion simple\n\nAnalisis por datos\nRespuesta repetida."}},
+    )
+
+    response = agent_module.agent_query(
+        "dame 3 recomendaciones especificas implementadas sobre esa recomendacion",
+        modo_respuesta="claro",
+    )
+
+    assert "Vuelve y gana" in response
+    assert "Verificacion simple" not in response
+
+
+def test_seguimiento_generico_usa_prompt_contextual_flexible(monkeypatch, requests_mock):
+    agent_module.reset_agent()
+    agent_module._actualizar_contexto_estructurado(
+        {
+            "tipo": "grafico",
+            "titulo": "Campanas por segmento",
+            "pregunta": "Que campana lanzarias este mes?",
+            "datos_texto": "segmento inactivos\nstudent 34\nyoung_professional 19",
+            "hechos_texto": "- Usuarios inactivos: maximo student = 34.",
+            "ultima_respuesta": "Idea 1: reactivar estudiantes. Idea 2: reducir friccion operativa.",
+        }
+    )
+    monkeypatch.setattr(agent_module, "OLLAMA_BASE_URL", "http://ollama.local")
+    monkeypatch.setattr(agent_module, "_verificar_ollama", lambda: True)
+    requests_mock.post(
+        "http://ollama.local/api/chat",
+        json={"message": {"content": "Mensaje listo para la segunda idea, sin repetir el analisis."}},
+    )
+
+    response = agent_module.agent_query(
+        "redacta un mensaje para la segunda idea",
+        modo_respuesta="claro",
+    )
+    payload = requests_mock.last_request.json()
+    system_prompt = payload["messages"][0]["content"]
+    context_message = " ".join(m["content"] for m in payload["messages"] if m["role"] == "system")
+
+    assert "Mensaje listo" in response
+    assert "Adapta el formato" in system_prompt
+    assert "FORMATO OBLIGATORIO" not in system_prompt
+    assert "Ultima respuesta del agente" in context_message
+    assert "Idea 2: reducir friccion operativa" in context_message
+
+
+def test_consulta_nueva_de_kpis_no_se_confunde_con_seguimiento(monkeypatch):
+    agent_module.reset_agent()
+    agent_module._actualizar_contexto_estructurado(
+        {
+            "tipo": "grafico",
+            "titulo": "Campanas por segmento",
+            "pregunta": "Que campana lanzarias este mes?",
+            "hechos_texto": "- Usuarios inactivos: maximo student = 34.",
+        }
+    )
+    monkeypatch.setattr(
+        agent_module,
+        "_resolver_seguimiento_con_ollama",
+        lambda *args, **kwargs: "NO_DEBE_SEGUIR_CONTEXTO",
+    )
+    monkeypatch.setattr(
+        agent_module,
+        "_respuesta_datos_confiable",
+        lambda *args, **kwargs: "KPIS_OK",
+    )
+
+    response = agent_module.agent_query("dame el resumen ejecutivo de la plataforma", modo_respuesta="claro")
+
+    assert response == "KPIS_OK"
+    assert response != "NO_DEBE_SEGUIR_CONTEXTO"
+
+
+def test_seguimiento_generico_sin_ollama_no_repite_consulta_gold(monkeypatch):
+    agent_module.reset_agent()
+    agent_module._actualizar_contexto_estructurado(
+        {
+            "tipo": "grafico",
+            "titulo": "Campanas por segmento",
+            "pregunta": "Que campana lanzarias este mes?",
+            "datos_texto": "segmento inactivos\nstudent 34\nyoung_professional 19",
+            "hechos_texto": "- Usuarios inactivos: maximo student = 34.",
+            "metricas": [
+                {
+                    "columna": "inactivos",
+                    "nombre": "usuarios inactivos",
+                    "max_label": "student",
+                    "min_label": "young_professional",
+                    "max_val": 34,
+                    "min_val": 19,
+                    "brecha": 15,
+                    "brecha_txt": "78.9% sobre el minimo",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(agent_module, "_verificar_ollama", lambda: False)
+    monkeypatch.setattr(
+        agent_module,
+        "_respuesta_datos_confiable",
+        lambda *args, **kwargs: "NO_DEBE_CONSULTAR_GOLD_NUEVO",
+    )
+
+    response = agent_module.agent_query(
+        "hazlo mas claro y dame dos alternativas",
+        modo_respuesta="claro",
+    )
+
+    assert "NO_DEBE_CONSULTAR_GOLD_NUEVO" not in response
+    assert "Vuelve y gana" in response or "Retomando" in response
+
+
+def test_seguimiento_sin_ollama_enfoca_ordinal_y_alternativas(monkeypatch):
+    agent_module.reset_agent()
+    agent_module._actualizar_contexto_estructurado(
+        {
+            "tipo": "grafico",
+            "titulo": "Campanas por segmento",
+            "pregunta": "Que campana lanzarias este mes?",
+            "datos_texto": "segmento inactivos tasa_fallo_pct\nstudent 34 26.8\nfamily 20 26.9",
+            "hechos_texto": "- Tasa de fallo: maximo family = 26.90.",
+            "metricas": [
+                {
+                    "columna": "tasa_fallo_pct",
+                    "nombre": "tasa de fallo",
+                    "max_label": "family",
+                    "min_label": "premium",
+                    "max_val": 26.9,
+                    "min_val": 16.4,
+                    "brecha": 10.5,
+                    "brecha_txt": "64.0% sobre el minimo",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(agent_module, "_verificar_ollama", lambda: False)
+
+    response = agent_module.agent_query(
+        "dame dos alternativas para la segunda idea",
+        modo_respuesta="claro",
+    )
+
+    assert "Dos alternativas" in response
+    assert "familias" in response
+    assert "friccion" in response.lower()
+    assert "Analisis por datos" not in response
+
+
+def test_gold_profile_and_preconsulta_controls(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "user_id": ["u1", "u2"],
+            "city": ["Bogotá", "Cali"],
+            "total_amount_cop": [1000.0, 2000.0],
+            "last_transaction_date": pd.to_datetime(["2026-06-01", "2026-06-02"]),
+            "user_email": ["a@test.com", "b@test.com"],
+        }
+    )
+
+    perfil = agent_module._perfilar_dataframe_gold("gold_user_360", df)
+
+    assert "total_amount_cop" in perfil["metricas"]
+    assert "city" in perfil["dimensiones"]
+    assert "last_transaction_date" in perfil["fechas"]
+    assert "user_email" in perfil["pii"]
+
+    respuesta, ruta = agent_module._evaluar_control_preconsulta("muéstrame correos de usuarios")
+    assert ruta == "bloqueo_pii"
+    assert "datos personales" in respuesta
+
+    agent_module.reset_agent()
+    respuesta, ruta = agent_module._evaluar_control_preconsulta("como vamos")
+    assert ruta == "aclaracion_ambigua"
+    assert "Necesito una aclaración" in respuesta
+
+    respuesta, ruta = agent_module._evaluar_control_preconsulta("predice exactamente el proximo mes")
+    assert ruta == "prediccion_no_soportada"
+    assert "predicción exacta" in respuesta
+
+
+def test_hallucination_guard_appends_deterministic_correction():
+    contexto = {
+        "tipo": "grafico",
+        "tipo_solicitado": "line",
+        "tipo_usado": "bar",
+        "etiquetas": ["Bogotá", "Barranquilla", "Cali"],
+        "hechos_texto": (
+            "- Métrica principal 'revenue_por_usuario': máximo Bogotá = 483,785.\n"
+            "- Métrica principal 'revenue_por_usuario': mínimo Cali = 402,195."
+        ),
+    }
+    texto = "El valor más bajo es Barranquilla y corresponde a una línea temporal."
+
+    validado = agent_module._validar_respuesta_contra_contexto(texto, contexto)
+
+    assert "Control determinístico" in validado
+    assert "mínimo validado por código es **Cali**" in validado
+    assert "se usaron **barras**" in validado
+
+
+def test_agent_trace_logger_writes_jsonl(monkeypatch, tmp_path):
+    trace_path = tmp_path / "agent_traces.jsonl"
+    monkeypatch.setattr(agent_module, "_TRACE_PATH", trace_path)
+
+    agent_module._registrar_traza_agente(
+        "pregunta",
+        "respuesta",
+        "ruta_test",
+        "claro",
+        {"detalle": "ok"},
+    )
+
+    payload = trace_path.read_text(encoding="utf-8").strip()
+    assert '"ruta": "ruta_test"' in payload
+    assert '"modo_respuesta": "claro"' in payload
 
 
 def test_consultar_sql_security_databricks_and_duckdb(monkeypatch):

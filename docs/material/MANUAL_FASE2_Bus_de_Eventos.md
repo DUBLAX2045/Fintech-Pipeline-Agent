@@ -3,7 +3,8 @@
 
 > **Nivel:** Principiante con fundamentos de Fase 1 completados
 > **Objetivo:** Conectar un ecommerce externo al pipeline Bronze usando un bus de eventos
-> **Última actualización:** Abril 2026
+> **Lenguaje:** Python 3.12
+> **Última actualización:** Junio 2026
 
 ---
 
@@ -92,11 +93,11 @@ Ecommerce Producer          asyncio.Queue              Bronze Consumer
 
 ### Instalación
 
-Solo necesitas Python 3.10+ (asyncio ya viene incluido):
+Solo necesitas Python 3.12 (asyncio ya viene incluido en la librería estándar):
 ```bash
-# asyncio está en la librería estándar, no necesitas pip install
-# Solo necesitas las que ya instalaste en Fase 1:
-pip install pandas pyarrow
+# asyncio está en la librería estándar, no necesitas pip install adicional
+# Instala todas las dependencias del proyecto:
+pip install -r requirements.txt
 ```
 
 ### Código completo — Bus con asyncio
@@ -541,9 +542,11 @@ if __name__ == "__main__":
 
 ## 4. Opción B — PyPubSub (pub/sub en proceso)
 
-PyPubSub es más simple y usa el patrón "publicar por tema". Ideal si quieres código más legible y menos orientado a async.
+> **Nota**: Esta opción es **solo educativa** — no está implementada en el proyecto real. El proyecto usa exclusivamente la Opción A (asyncio) con FastAPI. PyPubSub se documenta aquí para entender el patrón pub/sub de forma más simple.
 
-### Instalación
+PyPubSub usa el patrón "publicar por tema". Ideal para aprender el concepto antes de la implementación asyncio.
+
+### Instalación (solo si quieres explorar esta opción)
 
 ```bash
 pip install pypubsub
@@ -824,7 +827,7 @@ def consumir_kafka_a_bronze():
 
 ### ¿Cuándo migrar a estos servicios?
 
-- **asyncio**: Equipos pequeños, prototipos, hasta ~50K eventos/día
+- **asyncio** (implementación actual del proyecto): Equipos pequeños, prototipos, hasta ~50K eventos/día
 - **Kafka**: Cuando superas 100K eventos/día o necesitas replay de eventos
 - **AWS/GCP**: Cuando el equipo no quiere administrar infraestructura
 
@@ -832,51 +835,68 @@ def consumir_kafka_a_bronze():
 
 ## 6. Arquitectura Completa del Pipeline
 
-Así queda el flujo completo combinando lo de la Fase 1 y la Fase 2:
+Así queda el flujo completo del proyecto real (Fases 1 y 2):
 
 ```
-╔══════════════════════════════════════════════════════════════════╗
-║                    FUENTES DE DATOS                              ║
-╠══════════════════╦═══════════════════════════════════════════════╣
-║  Archivo JSON    ║           Ecommerce Externo                   ║
-║  (Carga inicial) ║    (Eventos en tiempo casi real)              ║
-║  fintech_events  ║                                               ║
-║  _v4.json        ║   API REST / Webhook / WebSocket              ║
-╚══════════════════╩═══════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════╗
+║                       FUENTES DE DATOS                            ║
+╠══════════════════════╦════════════════════════════════════════════╣
+║  Archivo JSON        ║      Ecommerce API (:8001)                 ║
+║  (Carga inicial)     ║  POST /simulate?n=100&tps=2                ║
+║  fintech_events_v4   ║  POST /ingest   ← evento individual        ║
+║  .json (2000 eventos)║  POST /ingest/batch ← hasta 500 eventos    ║
+╚══════════════════════╩════════════════════════════════════════════╝
          │                          │
          │                          ▼
-         │               ┌─────────────────────┐
-         │               │    BUS DE EVENTOS   │
-         │               │  asyncio.Queue  OR  │
-         │               │  PyPubSub       OR  │
-         │               │  Kafka/SQS          │
-         │               └─────────┬───────────┘
-         │                         │
-         └─────────────────────────┘
+         │               ┌────────────────────────────┐
+         │               │  API Receptor (:8000)       │
+         │               │  POST /ingest               │
+         │               │  GET  /health               │
+         │               │  GET  /pipeline/status      │
+         │               │  POST /pipeline/run         │
+         │               └──────────┬─────────────────┘
+         │                          │
+         │               ┌──────────▼─────────────────┐
+         │               │   BUS DE EVENTOS           │
+         │               │   asyncio.Queue             │
+         │               │   maxsize=1000              │
+         │               └──────────┬─────────────────┘
+         │                          │
+         └──────────────────────────┘
                           │
-                          ▼ (micro-batch: cada N eventos o N segundos)
-         ╔════════════════════════════════════════════╗
-         ║              CAPA BRONZE                   ║
-         ║  - Aplana JSON anidado                     ║
-         ║  - Agrega metadatos (timestamp, batch_id)  ║
-         ║  - Detecta y registra duplicados           ║
-         ║  - Guarda en Parquet particionado          ║
-         ║  data/bronze/events/date=YYYY-MM-DD/       ║
-         ╚════════════════════════════════════════════╝
-                          │
-                          ▼ (Fase 3 — próxima entrega)
-         ╔════════════════════════════════════════════╗
-         ║              CAPA SILVER                   ║
-         ║  - Limpia y normaliza                      ║
-         ║  - Enriquece con ip-api.com + ExchangeRate      ║
-         ╚════════════════════════════════════════════╝
-                          │
-                          ▼
-         ╔════════════════════════════════════════════╗
-         ║              CAPA GOLD                     ║
-         ║  - Visión 360 del usuario                  ║
-         ║  - Métricas agregadas por userId           ║
-         ╚════════════════════════════════════════════╝
+                          ▼ (micro-batch: 50 eventos ó flush 30s)
+         ╔══════════════════════════════════════════════╗
+         ║              CAPA BRONZE                     ║
+         ║  - Aplana JSON anidado (aplanar_todos)       ║
+         ║  - Agrega metadatos (timestamp, batch_id)    ║
+         ║  - Marca duplicados (is_duplicate=True)      ║
+         ║  - Guarda en Parquet particionado por fecha  ║
+         ║  data/bronze/events/date=YYYY-MM-DD/         ║
+         ╚═════════════════════┬════════════════════════╝
+                               │
+                    PipelineTrigger (throttled 60s)
+                               │
+                          ▼         ▼
+         ╔════════════════════╗  ╔══════════════════════╗
+         ║   CAPA SILVER      ║  ║    AWS S3            ║
+         ║  7 pasos: tipos,   ║  ║  (opcional)          ║
+         ║  flags, geo, moneda║  ╚══════════════════════╝
+         ╚══════════╦═════════╝
+                    │
+                    ▼
+         ╔══════════════════════════════════════════════╗
+         ║              CAPA GOLD                       ║
+         ║  gold_user_360.parquet (489 usuarios)        ║
+         ║  gold_daily_metrics.parquet                  ║
+         ║  gold_event_summary.parquet                  ║
+         ╚══════════════════════════════════════════════╝
+                    │
+                    ▼
+         ╔══════════════════════════════════════════════╗
+         ║   DASHBOARD + AGENTE IA (:8501)              ║
+         ║  Streamlit + Ollama llama3.2                 ║
+         ║  11 herramientas: SQL, gráficos, alertas     ║
+         ╚══════════════════════════════════════════════╝
 ```
 
 ---
@@ -963,19 +983,19 @@ python src/bus/event_bus_pypubsub.py
 Si el ecommerce real envía eventos via una API REST (lo más común), puedes crear un receptor HTTP con FastAPI que los ponga en el bus:
 
 ```python
-# src/bus/api_receiver.py
+# src/bus/api_receiver.py  (implementación real del proyecto)
 """
 Receptor HTTP para eventos del ecommerce.
-El ecommerce hace POST a /eventos y este servidor los pone en el bus.
+El ecommerce hace POST a /ingest y este servidor los pone en el bus.
 
 Instalación:
-    pip install fastapi uvicorn
+    pip install fastapi uvicorn  (ya incluido en requirements.txt)
 
 Uso:
     uvicorn src.bus.api_receiver:app --port 8000
     
 El ecommerce entonces hace:
-    POST http://localhost:8000/eventos
+    POST http://localhost:8000/ingest
     Body: { ...evento JSON... }
 """
 
@@ -987,10 +1007,10 @@ app = FastAPI(title="Fintech Event Receiver")
 _bus_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
 
 
-@app.post("/eventos")
+@app.post("/ingest")
 async def recibir_evento(evento: Dict[str, Any], background_tasks: BackgroundTasks):
     """
-    Endpoint que recibe eventos del ecommerce y los pone en el bus.
+    Endpoint principal: recibe eventos del ecommerce y los pone en el bus.
     Retorna inmediatamente (202 Accepted) sin esperar el procesamiento.
     """
     await _bus_queue.put(evento)
@@ -1000,19 +1020,32 @@ async def recibir_evento(evento: Dict[str, Any], background_tasks: BackgroundTas
 @app.get("/health")
 async def health():
     return {"status": "ok", "queue_size": _bus_queue.qsize()}
+
+@app.get("/pipeline/status")
+async def pipeline_status():
+    """Estado del pipeline: Bronze, Silver, Gold."""
+    return {"status": "ok", "queue_size": _bus_queue.qsize()}
+
+@app.post("/pipeline/run")
+async def pipeline_run():
+    """Dispara manualmente Silver → Gold → S3."""
+    return {"status": "triggered"}
 ```
 
 ```bash
-# Instalar FastAPI
-pip install fastapi uvicorn
+# Instalar FastAPI (ya incluido en requirements.txt)
+pip install -r requirements.txt
 
-# Iniciar el receptor
+# Iniciar el receptor (puerto 8000)
 uvicorn src.bus.api_receiver:app --port 8000
 
 # Probar enviando un evento (desde otra terminal)
-curl -X POST http://localhost:8000/eventos \
+curl -X POST http://localhost:8000/ingest \
   -H "Content-Type: application/json" \
   -d '{"source": "ecommerce.app", "detail": {"event": "PAYMENT_MADE"}}'
+
+# Verificar salud del receptor
+curl http://localhost:8000/health
 ```
 
 ---
@@ -1067,47 +1100,52 @@ print("\n🎉 Verificación completada exitosamente")
 
 ## 10. README — Sección Fase 2
 
-Agrega esto al final de tu `README.md`:
+Estado actual del proyecto (todas las fases completadas):
 
 ```markdown
-## ▶️ Fase 2 — Bus de Eventos (COMPLETADA)
+## ▶️ Fase 2 — Bus de Eventos ✅ COMPLETADA
 
-### Componentes implementados
+### Arquitectura dual-API implementada
 
-**Opción A: asyncio (Recomendada para desarrollo)**
-- Productor: genera eventos de ecommerce a N eventos/segundo
-- Bus: asyncio.Queue con backpressure (máx 1000 eventos en cola)
-- Consumidor: micro-batch → escribe a Bronze cada N eventos o N segundos
+| Componente | Puerto | Rol |
+|---|---|---|
+| `src/bus/api_receiver.py` | :8000 | Recibe eventos del ecommerce → Bus → Bronze |
+| `src/bus/ecommerce_api.py` | :8001 | Genera eventos simulados y los envía al receptor |
 
-**Opción B: PyPubSub (Más simple, para aprendizaje)**
-- Patrón pub/sub por topics (fintech.eventos, fintech.bronze.guardado)
-- Múltiples suscriptores al mismo topic (Bronze + Monitor)
+**Bus de eventos (asyncio.Queue):**
+- Capacidad: 1000 eventos en memoria
+- BronzeConsumer: micro-batch de 50 eventos OR flush cada 30 segundos
+- PipelineTrigger: dispara Silver → Gold → S3 con throttle mínimo de 60s
+
+### Endpoints disponibles
+
+**API Receptor (:8000)**
+- `POST /ingest` — Recibe un evento individual del ecommerce
+- `GET  /health` — Health check del servicio
+- `GET  /pipeline/status` — Estado del pipeline Bronze/Silver/Gold
+- `POST /pipeline/run` — Dispara Silver → Gold manualmente
+
+**API Ecommerce (:8001)**
+- `POST /simulate?n=100&tps=2` — Genera y envía N eventos a la tasa indicada
+- `POST /ingest` — Envía un evento individual al receptor
+- `POST /ingest/batch` — Envía hasta 500 eventos al receptor
 
 ### Cómo ejecutar
 
 ```bash
-# Opción A — asyncio (60 segundos, 3 eventos/segundo)
-python src/bus/event_bus_asyncio.py
+# Con Docker Compose (recomendado)
+docker compose --profile pipeline up
 
-# Opción B — PyPubSub (35 eventos con pausa de 0.3s)
-python src/bus/event_bus_pypubsub.py
+# O en local (dos terminales)
+uvicorn src.bus.api_receiver:app --port 8000   # Terminal 1
+uvicorn src.bus.ecommerce_api:app --port 8001  # Terminal 2
+
+# Simular 100 eventos desde el ecommerce
+curl -X POST "http://localhost:8001/simulate?n=100&tps=5"
 
 # Verificar datos en Bronze
-python verificar_bronze.py
+python scripts/verificar_pipeline_completo.py
 ```
-
-### Diagrama de flujo
-
-```
-Ecommerce → Bus de Eventos → BronzeConsumer → Parquet (Bronze)
-  (3 ev/s)   (asyncio.Queue)   (micro-batch)   (particionado por fecha)
-```
-
-### Próxima fase: Silver
-Los Parquet de Bronze serán leídos por el pipeline Silver para:
-- Limpiar y normalizar tipos de datos
-- Enriquecer con ip-api.com y ExchangeRate API
-- Eliminar duplicados confirmados
 ```
 
 ---
@@ -1116,17 +1154,18 @@ Los Parquet de Bronze serán leídos por el pipeline Silver para:
 
 | Pregunta | Respuesta |
 |---|---|
-| **¿Qué herramienta usar ahora?** | `asyncio` — sin instalación extra, corre en local |
-| **¿Para qué sirve PyPubSub?** | Para aprender el patrón pub/sub de forma simple |
+| **¿Qué herramienta usa el proyecto?** | `asyncio.Queue` — sin dependencias extra, integrado en Python |
+| **¿Para qué sirve PyPubSub en este manual?** | Solo educativa — el proyecto real usa asyncio |
 | **¿Cuándo usar Kafka?** | Cuando el volumen supere 100K eventos/día |
-| **¿El código de Bronze cambia?** | ❌ No — el bus solo alimenta Bronze con el mismo formato |
-| **¿Qué es micro-batch?** | Guardar N eventos juntos cada X segundos (no uno a uno) |
-| **¿Cómo se conecta un ecommerce real?** | Via HTTP POST a `api_receiver.py` (FastAPI) |
+| **¿El código de Bronze cambia?** | ❌ No — el bus alimenta Bronze con el mismo formato JSON |
+| **¿Qué es micro-batch?** | Guardar 50 eventos juntos o flush cada 30s (no uno a uno) |
+| **¿Cuál es el endpoint real?** | `POST /ingest` en el puerto 8000 (no `/eventos`) |
+| **¿Qué es PipelineTrigger?** | Componente que dispara Silver→Gold→S3 con throttle mínimo 60s |
+| **¿Se eliminan duplicados en Silver?** | ❌ No — se marcan `is_duplicate=True` pero se conservan para trazabilidad |
 
 ---
 
 *Manual Fase 2 — Bus de Eventos para Pipeline Fintech*
 *Basado en la arquitectura Medallion de Databricks*
-*Versión 1.0 — Abril 2026*
-```
+*Versión 2.0 — Junio 2026*
 

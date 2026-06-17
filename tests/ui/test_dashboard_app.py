@@ -20,17 +20,28 @@ def _assert_no_streamlit_exceptions(app: AppTest) -> None:
     assert not app.exception, [exception.value for exception in app.exception]
 
 
+def _markdown_text(app: AppTest) -> str:
+    return "\n".join(str(item.value) for item in app.markdown)
+
+
 def test_dashboard_centro_de_mando_renders_gold_overview(monkeypatch):
     app = _run_dashboard(monkeypatch)
 
     _assert_no_streamlit_exceptions(app)
     assert app.radio[0].options == ["Centro de mando", "Mesa de analisis", "Sistema"]
 
-    subheaders = {item.value for item in app.subheader}
-    assert "Volumen por segmento" in subheaders
-    assert "Usuarios por ciudad" in subheaders
-    assert "Comercios dominantes" in subheaders
-    assert "Canal preferido" in subheaders
+    markdown = _markdown_text(app)
+    assert "Pulso <em>financiero</em> de usuarios" in markdown
+    assert "Convierte eventos de pagos, compras, transferencias y recargas" in markdown
+    assert "Qué puedes descubrir aquí" in markdown
+    assert "Oportunidades de crecimiento" in markdown
+    assert "Indicadores clave" in markdown
+    assert "Cómo leer estos indicadores" in markdown
+    assert "Panorama de mercado" in markdown
+    assert "esta gráfica muestra qué segmentos concentran mayor volumen de dinero" in markdown
+    assert "Alianzas y distribución geográfica" in markdown
+    assert "Top 15 — Perfiles de mayor volumen" in markdown
+    assert "esta tabla ayuda a ubicar usuarios o grupos de alto valor" in markdown
     assert not app.error
 
 
@@ -40,7 +51,12 @@ def test_dashboard_mesa_de_analisis_renders_chat_controls(monkeypatch):
 
     _assert_no_streamlit_exceptions(app)
     button_labels = {button.label for button in app.button}
+    markdown = _markdown_text(app)
 
+    assert "Pregúntale a la plataforma qué está pasando con los usuarios" in markdown
+    assert "Qué puede responder el agente" in markdown
+    assert "Nivel de explicación" in markdown
+    assert app.segmented_control[0].options == ["Profesional financiero", "Explicación clara"]
     assert "Dame el resumen ejecutivo de la plataforma" in button_labels
     assert "Analiza la tasa de fallos de pago por segmento" in button_labels
     assert "Limpiar conversacion" in button_labels
@@ -53,9 +69,11 @@ def test_dashboard_sistema_renders_operational_status(monkeypatch):
     app.radio[0].set_value("Sistema").run(timeout=25)
 
     _assert_no_streamlit_exceptions(app)
-    subheaders = {item.value for item in app.subheader}
-    success_messages = [item.value for item in app.success]
+    markdown = _markdown_text(app)
 
-    assert {"Motor conversacional local", "Databricks", "Estado de datos Gold"}.issubset(subheaders)
-    assert any(message.startswith("gold_user_360:") for message in success_messages)
+    assert "Estado <em>operativo</em>" in markdown
+    assert "Servicios activos" in markdown
+    assert "Warehouse analítico — Databricks" in markdown
+    assert "Capa de datos Gold" in markdown
+    assert "gold_user_360" in markdown
     assert not app.error

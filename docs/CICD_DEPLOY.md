@@ -159,6 +159,21 @@ El workflow CI esta en:
 .github/workflows/ci.yml
 ```
 
+El workflow CD (`cd.yml`) usa **Docker Buildx** con cache de GitHub Actions para acelerar builds:
+
+```yaml
+- name: Configurar Docker Buildx
+  uses: docker/setup-buildx-action@v3
+
+- name: Build y push
+  uses: docker/build-push-action@v5
+  with:
+    cache-from: type=gha
+    cache-to: type=gha,mode=max
+```
+
+Esto reduce significativamente el tiempo de build en pushes sucesivos cuando `requirements.txt` no cambia.
+
 ---
 
 # MITAD 1 - WINDOWS GRATIS
@@ -304,23 +319,28 @@ Job 1 - test
   Corre tests unitarios en GitHub Ubuntu runner.
 
 Job 2 - build-and-push
-  Construye la imagen Docker.
-  Publica:
+  Valida que existan los secrets DOCKER_USERNAME y DOCKER_PASSWORD.
+  Configura Docker Buildx con cache de GitHub Actions (type=gha).
+  Construye la imagen con cache y la publica en Docker Hub:
     DOCKER_USERNAME/fintech-pipeline:latest
     DOCKER_USERNAME/fintech-pipeline:sha-xxxxxxx
 
 Job 3 - deploy-windows
   Corre en tu Windows self-hosted runner.
   Verifica Docker Desktop y C:\fintech_pipeline_deploy\.env.
+  Prepara carpeta de despliegue y copia docker-compose.yml + data/raw/.
   Hace docker pull de la imagen latest.
   Si la imagen no es publica, intenta login local a Docker Hub.
   La etiqueta como fintech-pipeline:latest.
-  Recrea dashboard, api y ecommerce.
-  Valida health local.
+  Elimina contenedores previos (fintech-dashboard, fintech-api, fintech-ecommerce) si existen.
+  Recrea dashboard, api y ecommerce con --force-recreate --no-build.
+  Valida health local (hasta 18 reintentos cada 5s = 90s de espera).
 
 Job 4 - run-pipeline-windows
   Solo corre si lanzas el workflow manualmente con run_pipeline=true.
 ```
+
+El paso de limpieza de contenedores previos es necesario porque Docker no permite dos contenedores con el mismo nombre global. El workflow elimina los contenedores con `docker rm -f` antes de recrearlos para evitar el error `Conflict: container name already in use`.
 
 ---
 
@@ -416,44 +436,636 @@ docker compose logs -f ecommerce
 
 ## 12. Publicar Dashboard Gratis desde Windows
 
-Para compartir tu dashboard sin pagar servidor, necesitas un tunel publico al
-puerto local `8501`.
+Tu dashboard ya corre localmente en:
 
-### Opcion recomendada para demo rapida: ngrok
+```text
+http://127.0.0.1:8501
+```
+
+Para que otra persona lo pueda abrir desde internet necesitas publicar ese
+puerto local. Hay tres caminos:
+
+```text
+ngrok
+  Mas rapido para demo. No necesitas abrir puertos del router.
+  En plan gratis usa dominio dev de ngrok; dominio personalizado requiere plan pago.
+
+Cloudflare Tunnel
+  Mejor para demo mas seria. No necesitas abrir puertos del router.
+  Con Quick Tunnel obtienes URL temporal trycloudflare.com.
+  Para hostname estable necesitas un dominio agregado a Cloudflare.
+
+DuckDNS
+  Subdominio gratis tipo tuapp.duckdns.org.
+  Normalmente necesitas abrir puertos en router y no estar detras de CGNAT.
+```
+
+Antes de cualquiera de las opciones, verifica:
+
+```powershell
+docker ps
+Invoke-WebRequest http://127.0.0.1:8501/_stcore/health -UseBasicParsing
+```
+
+La respuesta esperada del health es:
+
+```text
+ok
+```
+
+---
+
+### 12.1 Opcion A - ngrok
+
+Usala si quieres compartir rapido el dashboard en una sustentacion, demo o
+prueba externa.
+
+#### Paso 1 - Crear cuenta
+
+Entra a:
+
+```text
+https://dashboard.ngrok.com/signup
+```
+
+Crea cuenta o inicia sesion.
+
+#### Paso 2 - Instalar ngrok en Windows
+
+Opcion con instalador oficial:
+
+```text
+https://ngrok.com/download
+```
+
+Opcion con Windows Package Manager:
+
+```powershell
+winget install ngrok.ngrok
+```
+
+Verifica:
+
+```powershell
+ngrok version
+ngrok help
+```
+
+#### Paso 3 - Configurar authtoken
+
+En el dashboard de ngrok busca tu authtoken:
+
+```text
+https://dashboard.ngrok.com/get-started/your-authtoken
+```
+
+Configuralo:
+
+```powershell
+ngrok config add-authtoken TU_TOKEN_DE_NGROK
+```
+
+No pegues ese token en GitHub ni en capturas.
+
+#### Paso 4 - Levantar el dashboard local
+
+Si ya esta corriendo por Docker, solo verifica:
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8501/_stcore/health -UseBasicParsing
+```
+
+Si no esta corriendo:
+
+```powershell
+docker compose --profile dashboard up -d --force-recreate dashboard
+```
+
+#### Paso 5 - Publicar puerto 8501
+
+Ejecuta:
 
 ```powershell
 ngrok http 8501
 ```
 
-Te entrega una URL HTTPS publica. En plan gratuito puede cambiar la URL y tiene
-limites, pero para demos academicas suele ser suficiente.
+Tambien puedes ser explicito:
 
-### Opcion alternativa: Cloudflare Tunnel
+```powershell
+ngrok http http://127.0.0.1:8501
+```
+
+ngrok mostrara algo parecido a:
+
+```text
+Forwarding  https://xxxxx.ngrok-free.app -> http://localhost:8501
+```
+
+Abre la URL `https://xxxxx.ngrok-free.app` en el navegador.
+
+#### Paso 6 - Compartir URL
+
+Comparte solo la URL publica:
+
+```text
+https://xxxxx.ngrok-free.app
+```
+
+No compartas:
+
+```text
+http://127.0.0.1:8501
+```
+
+porque `127.0.0.1` solo funciona en tu propia maquina.
+
+#### Paso 7 - Apagar ngrok
+
+En la terminal donde corre ngrok:
+
+```text
+CTRL + C
+```
+
+Cuando apagas ngrok, la URL publica deja de funcionar.
+
+#### Notas importantes de ngrok
+
+```text
+Ventaja:
+  Es el camino mas rapido.
+
+Desventaja:
+  La URL puede cambiar en plan gratis.
+
+Dominio propio:
+  Si quieres algo como app.tudominio.com con ngrok, normalmente necesitas un
+  dominio propio y plan de ngrok que permita custom domains.
+```
+
+---
+
+### 12.2 Opcion B - Cloudflare Tunnel
+
+Usala si quieres publicar sin abrir puertos y con una ruta mas cercana a
+produccion.
+
+Cloudflare tiene dos estilos:
+
+```text
+Quick Tunnel
+  Rapido, temporal, sin dominio propio.
+  URL tipo https://algo.trycloudflare.com.
+
+Named Tunnel con hostname
+  Mas estable.
+  Requiere cuenta Cloudflare y tener un dominio agregado a Cloudflare.
+```
+
+#### Camino rapido - Quick Tunnel
+
+##### Paso 1 - Instalar cloudflared
+
+Descarga desde:
+
+```text
+https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+```
+
+O con Windows Package Manager:
+
+```powershell
+winget install Cloudflare.cloudflared
+```
+
+Verifica:
+
+```powershell
+cloudflared --version
+```
+
+##### Paso 2 - Verificar dashboard local
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8501/_stcore/health -UseBasicParsing
+```
+
+##### Paso 3 - Crear tunel temporal
 
 ```powershell
 cloudflared tunnel --url http://localhost:8501
 ```
 
-Puede entregar una URL temporal publica. Para usar un dominio propio estable en
-Cloudflare normalmente debes tener un dominio agregado a Cloudflare.
+La consola mostrara una URL similar a:
 
-### Opcion con subdominio gratis: DuckDNS
+```text
+https://nombre-aleatorio.trycloudflare.com
+```
+
+Abrela en el navegador y valida el dashboard.
+
+##### Paso 4 - Apagar Quick Tunnel
+
+En la terminal:
+
+```text
+CTRL + C
+```
+
+Cuando apagas `cloudflared`, la URL temporal deja de funcionar.
+
+#### Camino estable - Cloudflare con dominio propio
+
+Este camino es estable, pero requiere tener un dominio agregado a Cloudflare.
+El dominio puede ser comprado en cualquier registrador. Cloudflare Tunnel puede
+ser gratis, pero el dominio profesional normalmente no lo es.
+
+##### Paso 1 - Crear cuenta Cloudflare
+
+```text
+https://dash.cloudflare.com/sign-up
+```
+
+##### Paso 2 - Agregar tu dominio
+
+En Cloudflare:
+
+```text
+Websites -> Add a site
+```
+
+Cloudflare te pedira cambiar los nameservers del dominio en tu registrador.
+Hasta que el dominio no este activo en Cloudflare, no podras crear un hostname
+estable tipo:
+
+```text
+fintech.tudominio.com
+```
+
+##### Paso 3 - Crear Tunnel desde dashboard
+
+Ruta:
+
+```text
+Cloudflare Dashboard -> Zero Trust -> Networks -> Tunnels
+```
+
+Luego:
+
+```text
+Create a tunnel
+Connector type: Cloudflared
+Name: fintech-dashboard
+Save tunnel
+```
+
+##### Paso 4 - Instalar y ejecutar connector en Windows
+
+Cloudflare te mostrara un comando especifico para Windows. Copialo y ejecutalo
+en PowerShell. Sera parecido a:
+
+```powershell
+cloudflared.exe service install TOKEN_QUE_DA_CLOUDFLARE
+```
+
+o un comando de ejecucion directa. Usa el que te da el dashboard, porque ese
+token identifica tu tunnel.
+
+##### Paso 5 - Crear public hostname
+
+En el tunnel:
+
+```text
+Public Hostname -> Add a public hostname
+```
+
+Configura:
+
+```text
+Subdomain: fintech
+Domain: tudominio.com
+Type: HTTP
+URL: localhost:8501
+```
+
+Quedara:
+
+```text
+https://fintech.tudominio.com
+```
+
+##### Paso 6 - Validar
+
+Abre:
+
+```text
+https://fintech.tudominio.com
+```
+
+Si falla, revisa:
+
+```powershell
+cloudflared tunnel list
+cloudflared tunnel info fintech-dashboard
+docker ps
+Invoke-WebRequest http://127.0.0.1:8501/_stcore/health -UseBasicParsing
+```
+
+#### Notas importantes de Cloudflare
+
+```text
+Ventaja:
+  No requiere abrir puertos del router.
+
+Desventaja:
+  URL temporal con Quick Tunnel; hostname estable requiere dominio propio.
+
+Recomendacion:
+  Usa Quick Tunnel para probar hoy.
+  Usa dominio propio + Tunnel si quieres una URL seria y estable.
+```
+
+---
+
+### 12.3 Opcion C - DuckDNS
+
+DuckDNS te da un subdominio gratis:
 
 ```text
 tu-subdominio.duckdns.org
 ```
 
-DuckDNS es DNS dinamico gratis, pero normalmente requiere abrir puertos en tu
-router y que tu proveedor de internet permita conexiones entrantes. Por eso es
-menos comodo que ngrok o Cloudflare Tunnel para una demo rapida.
-
-Conclusion practica:
+Pero a diferencia de ngrok y Cloudflare Tunnel, DuckDNS no crea un tunel. Solo
+hace que el nombre apunte a tu IP publica. Por eso normalmente necesitas:
 
 ```text
-Demo rapida            -> ngrok
-Demo un poco mas seria -> Cloudflare Tunnel
-Subdominio gratis      -> DuckDNS, si puedes abrir puertos
-Dominio profesional    -> normalmente hay que comprar dominio
+IP publica real
+Port forwarding en el router
+Firewall de Windows permitiendo el puerto
+Docker exponiendo el puerto 8501
+```
+
+Si tu proveedor usa CGNAT, DuckDNS puede actualizar bien el dominio, pero nadie
+podra entrar desde internet a tu PC. En ese caso usa ngrok o Cloudflare Tunnel.
+
+#### Paso 1 - Crear cuenta DuckDNS
+
+Entra a:
+
+```text
+https://www.duckdns.org
+```
+
+Inicia sesion con alguno de los metodos disponibles.
+
+#### Paso 2 - Crear subdominio
+
+En DuckDNS:
+
+```text
+sub domain: fintech-alexander
+add domain
+```
+
+Tu URL sera:
+
+```text
+fintech-alexander.duckdns.org
+```
+
+Guarda:
+
+```text
+DOMAIN = fintech-alexander
+TOKEN  = token que muestra DuckDNS
+```
+
+No subas el token a GitHub.
+
+#### Paso 3 - Probar actualizacion de IP publica
+
+En PowerShell:
+
+```powershell
+$domain = "fintech-alexander"
+$token = "TU_TOKEN_DUCKDNS"
+$url = "https://www.duckdns.org/update?domains=$domain&token=$token&ip="
+Invoke-WebRequest -Uri $url -UseBasicParsing
+```
+
+Respuesta esperada:
+
+```text
+OK
+```
+
+Si devuelve:
+
+```text
+KO
+```
+
+revisa dominio o token.
+
+#### Paso 4 - Automatizar actualizacion de IP
+
+Crea carpeta:
+
+```powershell
+New-Item -ItemType Directory -Force C:\duckdns
+```
+
+Crea archivo:
+
+```text
+C:\duckdns\update-duckdns.ps1
+```
+
+Contenido:
+
+```powershell
+$domain = "fintech-alexander"
+$token = "TU_TOKEN_DUCKDNS"
+$log = "C:\duckdns\duckdns.log"
+$url = "https://www.duckdns.org/update?domains=$domain&token=$token&ip="
+
+try {
+    $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20
+    "$(Get-Date -Format s) $($response.Content)" | Out-File -FilePath $log -Append -Encoding utf8
+} catch {
+    "$(Get-Date -Format s) ERROR $($_.Exception.Message)" | Out-File -FilePath $log -Append -Encoding utf8
+}
+```
+
+Prueba:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\duckdns\update-duckdns.ps1
+Get-Content C:\duckdns\duckdns.log -Tail 5
+```
+
+#### Paso 5 - Crear tarea programada en Windows
+
+Ejecuta PowerShell como Administrador:
+
+```powershell
+$action = New-ScheduledTaskAction `
+  -Execute "powershell.exe" `
+  -Argument "-ExecutionPolicy Bypass -File C:\duckdns\update-duckdns.ps1"
+
+$trigger = New-ScheduledTaskTrigger `
+  -Once `
+  -At (Get-Date).Date `
+  -RepetitionInterval (New-TimeSpan -Minutes 5) `
+  -RepetitionDuration (New-TimeSpan -Days 3650)
+
+Register-ScheduledTask `
+  -TaskName "DuckDNS Fintech Updater" `
+  -Action $action `
+  -Trigger $trigger `
+  -Description "Actualiza IP publica de DuckDNS para fintech pipeline"
+```
+
+Verifica:
+
+```powershell
+Get-ScheduledTask -TaskName "DuckDNS Fintech Updater"
+```
+
+#### Paso 6 - Fijar IP local de tu PC
+
+En tu router, reserva una IP para tu PC, por ejemplo:
+
+```text
+192.168.1.50
+```
+
+Tambien puedes revisar tu IP local con:
+
+```powershell
+ipconfig
+```
+
+Busca la interfaz activa y el campo:
+
+```text
+IPv4 Address
+```
+
+#### Paso 7 - Abrir puerto en el router
+
+Entra al panel del router y crea port forwarding:
+
+```text
+External port: 8501
+Internal IP:   192.168.1.50
+Internal port: 8501
+Protocol:      TCP
+```
+
+Cada router cambia el nombre:
+
+```text
+Port Forwarding
+Virtual Server
+NAT
+Applications
+```
+
+#### Paso 8 - Permitir puerto en Firewall de Windows
+
+PowerShell como Administrador:
+
+```powershell
+New-NetFirewallRule `
+  -DisplayName "Fintech Dashboard 8501" `
+  -Direction Inbound `
+  -Protocol TCP `
+  -LocalPort 8501 `
+  -Action Allow
+```
+
+#### Paso 9 - Verificar acceso local
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8501/_stcore/health -UseBasicParsing
+```
+
+#### Paso 10 - Verificar acceso desde internet
+
+Desde un celular usando datos moviles, no Wi-Fi, abre:
+
+```text
+http://fintech-alexander.duckdns.org:8501
+```
+
+Si funciona en datos moviles, ya esta expuesto publicamente.
+
+#### Paso 11 - Problemas comunes con DuckDNS
+
+```text
+El dominio resuelve pero no abre:
+  Falta port forwarding o firewall.
+
+Funciona en Wi-Fi pero no desde datos moviles:
+  Probablemente estas probando desde la misma red. Prueba fuera de casa.
+
+No funciona desde ningun lado:
+  Puede haber CGNAT. Usa ngrok o Cloudflare Tunnel.
+
+Quiero HTTPS:
+  DuckDNS solo resuelve DNS. Para HTTPS necesitas reverse proxy/certificado,
+  por ejemplo Caddy, Nginx o Cloudflare Tunnel.
+```
+
+#### Nota de seguridad para DuckDNS
+
+DuckDNS expone directamente tu puerto local a internet. Para demo academica es
+mejor ngrok o Cloudflare Tunnel, porque puedes apagar el tunel al terminar y no
+dejas un puerto abierto permanentemente.
+
+---
+
+### 12.4 Recomendacion Final
+
+Para tu caso actual:
+
+```text
+1. Usa ngrok primero.
+2. Si quieres algo mas serio sin abrir puertos, usa Cloudflare Tunnel.
+3. Usa DuckDNS solo si entiendes port forwarding y tu internet no tiene CGNAT.
+```
+
+Orden recomendado para probar:
+
+```powershell
+# 1. Confirmar dashboard
+Invoke-WebRequest http://127.0.0.1:8501/_stcore/health -UseBasicParsing
+
+# 2. Demo rapida
+ngrok http 8501
+
+# 3. Alternativa sin abrir puertos
+cloudflared tunnel --url http://localhost:8501
+```
+
+Fuentes oficiales:
+
+```text
+ngrok Agent CLI Quickstart:
+https://ngrok.com/docs/getting-started
+
+ngrok Domains:
+https://ngrok.com/docs/universal-gateway/domains
+
+Cloudflare Tunnel:
+https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/
+
+Cloudflare Quick Tunnels:
+https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/
+
+DuckDNS install:
+https://www.duckdns.org/install.jsp
 ```
 
 ---
@@ -857,7 +1469,9 @@ Ruta privada:
 Cuando todo este listo:
 
 ```powershell
-git add .github/workflows/cd.yml .github/workflows/ci.yml docker-compose.yml docs/CICD_DEPLOY.md docs/DOCKER_DEPLOY.md
-git commit -m "ci(cd): organizar despliegue windows y linux"
+git add .github/workflows/cd.yml .github/workflows/ci.yml docker-compose.yml `
+        docs/CICD_DEPLOY.md docs/DOCKER_DEPLOY.md docs/AGENT_CONTROL_DETERMINISTICO.md `
+        README.md src/agent/app.py src/agent/agent.py tests/ui/test_dashboard_app.py
+git commit -m "feat: rediseno dashboard dark theme + mejoras CD + control deterministico agente"
 git push origin master
 ```

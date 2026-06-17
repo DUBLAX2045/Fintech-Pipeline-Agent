@@ -2,9 +2,9 @@
 ## Proyecto: Plataforma de Datos Fintech en Tiempo Real
 
 > **Nivel:** Principiante  
-> **Lenguaje:** Python 3.10+  
+> **Lenguaje:** Python 3.12  
 > **IDE recomendado:** Visual Studio Code  
-> **Última actualización:** Abril 2026
+> **Última actualización:** Junio 2026
 
 ---
 
@@ -45,7 +45,7 @@ Un **entorno virtual** es una burbuja aislada donde instalas las librerías del 
 # 1. Abre la terminal en VS Code (Ctrl+Ñ en Windows / Ctrl+` en Mac)
 
 # 2. Navega a la carpeta del proyecto
-cd fintech_pipeline
+cd fintech_pipeline_v3
 
 # 3. Crea el entorno virtual (se llama 'venv' por convención)
 python -m venv venv
@@ -67,25 +67,22 @@ source venv/bin/activate
 Con el entorno virtual activo, ejecuta:
 
 ```bash
-pip install pandas pyarrow faker schedule requests python-dotenv
+pip install -r requirements.txt
 ```
 
-Descripción de cada librería:
+Librerías principales del proyecto (ya están en `requirements.txt`):
 
 | Librería | ¿Para qué sirve en este proyecto? |
 |---|---|
 | `pandas` | Manipular y transformar los datos (limpiar, filtrar, agrupar) |
 | `pyarrow` | Guardar datos en formato Parquet (eficiente y rápido) |
 | `faker` | Generar datos falsos pero realistas para el simulador de ecommerce |
-| `schedule` | Ejecutar tareas automáticamente cada cierto tiempo (micro-batch) |
 | `requests` | Hacer llamadas a las APIs externas (ip-api.com, ExchangeRate) |
 | `python-dotenv` | Leer variables de entorno desde un archivo `.env` (para API keys) |
-
-Después de instalar, guarda las dependencias para que otros puedan replicar tu entorno:
-
-```bash
-pip freeze > requirements.txt
-```
+| `fastapi` + `uvicorn` | APIs REST para recibir eventos en tiempo real (Fase 2) |
+| `streamlit` | Dashboard web interactivo del agente IA (Fase 3) |
+| `duckdb` | Motor SQL local para consultas sobre los Parquets Gold (Fase 3) |
+| `boto3` | Subida de Parquets a AWS S3 (Fase 4) |
 
 ---
 
@@ -94,44 +91,94 @@ pip freeze > requirements.txt
 Organiza tu proyecto así desde el principio. Una buena estructura hace que el código sea fácil de entender y mantener.
 
 ```
-fintech_pipeline/
+fintech_pipeline_v3/
 │
 ├── data/                          ← Todas las capas de datos
 │   ├── raw/                       ← JSON original sin tocar
 │   │   └── fintech_events_v4.json
 │   ├── bronze/                    ← Datos aplanados + metadatos de ingesta
 │   │   └── events/
-│   │       └── date=2026-04-21/
+│   │       └── date=2026-05-22/
 │   │           └── batch_001.parquet
 │   ├── silver/                    ← Datos limpios + enriquecidos (Fase 2)
+│   │   └── silver_events.parquet
 │   └── gold/                      ← Agregados por usuario (Fase 3)
+│       ├── gold_user_360.parquet
+│       ├── gold_daily_metrics.parquet
+│       └── gold_event_summary.parquet
 │
 ├── src/                           ← Código fuente del proyecto
 │   ├── bronze/
+│   │   ├── pipeline_bronze.py     ← Orquestador Bronze
 │   │   ├── ingest.py              ← Leer y aplanar el JSON
 │   │   ├── metadata.py            ← Agregar metadatos de ingesta
+│   │   ├── save.py                ← Guardar Parquet particionado
 │   │   └── simulator.py           ← Generador de eventos de ecommerce
-│   ├── silver/                    ← (Fase 2)
-│   └── gold/                      ← (Fase 3)
+│   ├── silver/
+│   │   └── pipeline_silver.py     ← 7 pasos: limpieza, geo, moneda, parquet
+│   ├── gold/
+│   │   └── pipeline_gold.py       ← 3 tablas: user_360, daily_metrics, event_summary
+│   ├── bus/                       ← Bus de eventos asyncio (Fase 2)
+│   │   ├── event_bus_asyncio.py
+│   │   ├── message_schema.py
+│   │   ├── api_receiver.py        ← FastAPI receptor puerto 8000
+│   │   ├── ecommerce_api.py       ← FastAPI generador puerto 8001
+│   │   ├── pipeline_trigger.py    ← Auto-trigger Silver→Gold con throttling
+│   │   └── start_full_pipeline.py
+│   ├── agent/                     ← Agente IA + Dashboard (Fase 3)
+│   │   ├── agent.py
+│   │   ├── app.py                 ← Dashboard Streamlit
+│   │   ├── schema.py
+│   │   ├── security.py
+│   │   ├── intent_router.py
+│   │   └── tools.py
+│   ├── ingesta/                   ← Subida a AWS S3 (Fase 4)
+│   │   └── uploader_s3.py
+│   ├── config/
+│   │   └── databricks_config.py
+│   ├── io/
+│   │   └── parquet_io.py
+│   └── run_pipeline.py            ← Punto de entrada batch
 │
-├── notebooks/                     ← Exploración y prototipado
-│   └── 01_explorar_json.ipynb
+├── scripts/                       ← Scripts de verificación y smoke checks
+│   ├── verificar_pipeline_completo.py
+│   ├── verificar_cloud.py
+│   ├── verificar_agente.py
+│   └── verificar_documentacion.py
+│
+├── tests/                         ← Suite de pruebas
+│   ├── unit/
+│   ├── integration/
+│   ├── ui/
+│   └── mutation/
+│
+├── outputs/                       ← Gráficos y reportes generados
+│   ├── charts/
+│   └── reports/
 │
 ├── logs/                          ← Registros de ejecución
-│   └── duplicates_log.csv
 │
+├── docs/                          ← Documentación del proyecto
+│
+├── .github/workflows/             ← CI/CD con GitHub Actions
+│   ├── ci.yml
+│   └── cd.yml
+│
+├── Dockerfile
+├── docker-compose.yml
 ├── .env                           ← Claves de API (NUNCA subir a Git)
-├── .gitignore                     ← Archivos que Git debe ignorar
-├── requirements.txt               ← Lista de dependencias
-└── README.md                      ← Documentación del proyecto
+├── .env.example                   ← Plantilla segura de variables
+├── .gitignore
+├── requirements.txt
+└── README.md
 ```
 
-Crea todas las carpetas de una vez ejecutando esto en la terminal:
+Crea las carpetas de Fase 1 para empezar:
 
 ```bash
 mkdir -p data/raw data/bronze/events data/silver data/gold
 mkdir -p src/bronze src/silver src/gold
-mkdir -p notebooks logs
+mkdir -p scripts tests logs outputs/charts outputs/reports
 ```
 
 Crea el archivo `.gitignore` con este contenido:
@@ -858,54 +905,65 @@ python src/bronze/simulator.py
 
 Esta sección es un adelanto para que sepas hacia dónde va el proyecto.
 
-### Capa Silver (siguiente fase)
+### Capa Silver (Fase 2)
 
 La capa Silver toma los datos Bronze y los **limpia y enriquece**:
 
 ```
 Bronze (crudo, aplanado)
     ↓
-Silver (limpio, enriquecido)
-    - Convertir timestamp a datetime real
-    - Convertir amount a float (tipo numérico correcto)
-    - Agregar amount_usd (llamando a ExchangeRate API)
-    - Agregar ip_country, ip_city (llamando a ip-api.com)
-    - Marcar registros FAILED vs SUCCESS
-    - Eliminar duplicados confirmados
+Silver (limpio, enriquecido) — src/silver/pipeline_silver.py
+    - Convertir timestamp a datetime real (UTC)
+    - Convertir amount a float → renombrar a amount_cop
+    - Agregar amount_usd (llamando a open.er-api.com con caché 1h)
+    - Agregar flags: is_failed, is_transactional, ip_is_private
+    - Geolocalización: IPs privadas → payload.city; IPs públicas → ip-api.com
+    - Los duplicados NO se eliminan — se preservan con is_duplicate=True (trazabilidad)
+    - Guardar en silver_events.parquet (compresión snappy)
 ```
 
-### Capa Gold (fase posterior)
+### Capa Gold (Fase 2)
 
 La capa Gold consolida los datos por usuario para construir la **Visión 360**:
 
 ```
 Silver (evento a evento)
     ↓
-Gold (consolidado por userId)
-    - total_transactions por usuario
-    - total_amount_cop y total_amount_usd
-    - top_merchant, top_category
-    - preferred_channel
-    - balance_current (último balance conocido)
-    - failed_transaction_rate
+Gold (consolidado por userId) — src/gold/pipeline_gold.py
+    - gold_user_360.parquet    → 19 columnas por usuario
+    - gold_daily_metrics.parquet → KPIs agregados por día
+    - gold_event_summary.parquet → Resumen por tipo de evento
 ```
 
-### Integración con flujo en tiempo real
+### Agente IA (Fase 3)
 
-Una vez que el simulador funcione, el flujo completo será:
+Una vez que Gold exista, el agente puede responder preguntas en lenguaje natural:
 
 ```
-Ecommerce (eventos nuevos)
-    ↓ cada 30 segundos
-Simulador genera JSON
+Pregunta del usuario → Agente IA (Ollama + llama3.2)
     ↓
-Pipeline Bronze (aplanar + metadatos + Parquet)
+11 herramientas (@tool): SQL sobre Gold, gráficos, alertas, reportes HTML
     ↓
-Pipeline Silver (limpiar + enriquecer con APIs)
+DuckDB local (fallback) o Databricks SQL warehouse
     ↓
-Pipeline Gold (actualizar Visión 360 del usuario)
+Dashboard Streamlit en http://localhost:8501
+```
+
+> **Nota**: el agente usa **Ollama** corriendo localmente, no Claude AI ni OpenAI.
+> Requiere `ollama serve` y `ollama pull llama3.2` antes de iniciar el dashboard.
+
+### Flujo completo en tiempo real (Fase 2 — Bus de Eventos)
+
+```
+POST /ingest (FastAPI puerto 8000)
     ↓
-Dashboard (mostrar métricas actualizadas)
+EventBus (asyncio.Queue, maxsize=1000)
+    ↓
+BronzeConsumer (micro-batch: 50 eventos ó flush cada 30s)
+    ↓
+PipelineTrigger (throttled: mínimo 60s entre ejecuciones)
+    ↓
+Silver → Gold → S3 (si configurado)
 ```
 
 ---
@@ -935,7 +993,7 @@ eventos financieros (pagos, transferencias, compras) de una fintech colombiana.
 Bronze  → Datos crudos aplanados + metadatos de ingesta
 Silver  → Datos limpios + enriquecidos con APIs (ip-api.com, ExchangeRate)
 Gold    → Agregados por usuario (Visión 360) + métricas de negocio
-Agente  → Consultas en lenguaje natural sobre capa Gold (Claude AI)
+Agente  → Consultas en lenguaje natural sobre capa Gold (Ollama llama3.2 — 100% local)
 ```
 
 ## 🚀 Instalación
@@ -1007,31 +1065,41 @@ python src/bronze/simulator.py
 ### ✅ Fase 1 — Capa Bronze (COMPLETADA)
 - [x] Leer y aplanar JSON anidado
 - [x] Agregar metadatos de ingesta (timestamp, batch_id, source_file)
-- [x] Detectar y registrar duplicados
+- [x] Detectar y marcar duplicados (`is_duplicate=True` — nunca se eliminan)
 - [x] Guardar en Parquet particionado por fecha
 - [x] Simulador de eventos de ecommerce con Faker
 
-### 🔄 Fase 2 — Capa Silver (EN PROGRESO)
-- [ ] Normalizar tipos de datos
-- [ ] Enriquecimiento con ip-api.com (geolocalización)
-- [ ] Enriquecimiento con ExchangeRate API (conversión de moneda)
-- [ ] Limpieza de registros fallidos
+### ✅ Fase 2 — Capas Silver y Gold + Bus de Eventos (COMPLETADA)
+- [x] Normalizar tipos de datos (timestamp UTC, amount_cop float)
+- [x] Enriquecimiento con ip-api.com (solo IPs públicas)
+- [x] Enriquecimiento con open.er-api.com (conversión COP → USD, caché 1h)
+- [x] Flags: is_failed, is_transactional, ip_is_private, geo_source
+- [x] 3 tablas Gold: user_360, daily_metrics, event_summary
+- [x] Bus de eventos asyncio (EventBus + BronzeConsumer + PipelineTrigger)
+- [x] APIs FastAPI: receptor (:8000) y generador ecommerce (:8001)
 
-### ⏳ Fase 3 — Capa Gold
-- [ ] Agregados por usuario (Visión 360)
-- [ ] Métricas de negocio
+### ✅ Fase 3 — Agente IA + Dashboard (COMPLETADA)
+- [x] Agente IA con Ollama (llama3.2) — 11 herramientas @tool
+- [x] Dashboard Streamlit con tema oscuro terminal financiero
+- [x] Historial de conversación 4 turnos, seguimiento anafórico
+- [x] Alertas automáticas, comparativa de períodos, reportes HTML
 
-### ⏳ Fase 4 — Agente Inteligente
-- [ ] Text-to-SQL con Claude AI
-- [ ] Dashboard interactivo
+### ✅ Fase 4 — Cloud + CI/CD (COMPLETADA)
+- [x] AWS S3 — subida automática de Parquets Silver/Gold
+- [x] Databricks Unity Catalog — SQL warehouse en producción
+- [x] Docker + docker-compose con 6 perfiles de servicio
+- [x] CI/CD con GitHub Actions + self-hosted runner Windows
+- [x] Publicación externa: ngrok, Cloudflare Tunnel, DuckDNS
 
 ## 🔑 APIs Externas
 
 | API | URL | Uso |
 |---|---|---|
-| ip-api.com | https://ip-api.com/ | Geolocalización por IP |
-| ExchangeRate | https://www.exchangerate-api.com/ | Tasas de cambio COP→USD |
-| CoinGecko | https://www.coingecko.com/en/api | Datos cripto (opcional) |
+| ip-api.com | http://ip-api.com/json/ | Geolocalización por IP pública (45 req/min gratis) |
+| open.er-api.com | https://open.er-api.com/v6/latest/COP | Tasas de cambio COP→USD (fallback: 1/4150) |
+| Ollama | http://localhost:11434 | LLM local llama3.2 para el agente IA |
+
+> **Nota sobre IPs**: el 100% de las IPs en `fintech_events_v4.json` son privadas (192.168.x.x). ip-api.com no puede resolverlas. El pipeline Silver usa el campo `city` del payload como fuente de geolocalización para estos registros.
 
 ## 🧪 Estructura de los Datos
 
@@ -1091,6 +1159,6 @@ Antes de pasar a la Fase 2, verifica:
 ---
 
 *Manual generado para el Reto 1 — Plataforma de Datos Fintech en Tiempo Real*
-*Versión 1.0 — Abril 2026*
+*Versión 2.0 — Junio 2026 (actualizado para reflejar el proyecto completado)*
 ```
 

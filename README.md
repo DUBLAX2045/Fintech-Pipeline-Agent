@@ -1,6 +1,6 @@
 # Fintech Data Pipeline V3
 
-Plataforma de datos financieros de extremo a extremo con arquitectura medallion **Bronze → Silver → Gold**, bus de eventos asyncio, agente IA conversacional con **Ollama (llama3.2)**, AWS S3 y Databricks Unity Catalog.
+Plataforma de datos financieros de extremo a extremo con arquitectura medallion **Bronze → Silver → Gold**, bus de eventos asyncio, APIs FastAPI, dashboard ejecutivo Streamlit, agente IA conversacional con **Ollama (llama3.2)**, AWS S3, Databricks Unity Catalog, Docker y CI/CD con GitHub Actions.
 
 ---
 
@@ -11,6 +11,8 @@ Un pipeline de datos financieros que simula el backend analítico de una fintech
 Opera en **dos modos paralelos**:
 - **Batch** — procesa el dataset completo en una sola ejecución (`python src/run_pipeline.py`)
 - **Streaming** — ingesta continua vía HTTP con procesamiento asíncrono y micro-batches
+
+También incluye despliegue local completo en **Windows + Docker Desktop**, publicación de imagen en **Docker Hub**, CD con **GitHub self-hosted runner**, pruebas automatizadas y publicación opcional del dashboard con **ngrok**, **Cloudflare Tunnel** o **DuckDNS**.
 
 ---
 
@@ -294,6 +296,33 @@ Se activa con frases como "genera el reporte", "exportar informe", "reporte HTML
 
 ---
 
+## Dashboard Ejecutivo Streamlit
+
+El dashboard principal vive en `src/agent/app.py` y funciona como consola operativa del proyecto:
+
+- **Centro de mando**: KPIs Gold, volumen por segmento, ciudad líder, canal, tablas ejecutivas y filtros.
+- **Mesa de análisis**: chat con el agente IA, preguntas sugeridas, gráficos y reportes HTML.
+- **Sistema**: estado de Ollama, Databricks, capa Gold y credenciales operativas.
+- **Panel de navegación responsivo**: sidebar con botones activo/inactivo diferenciados visualmente.
+- **Acción operativa**: botón `Ejecutar Silver/Gold` que llama al API interno `/pipeline/run` desde Docker.
+- **Tema visual**: interfaz oscura tipo terminal financiero — fondo `#050a14`, acento emerald `#10b981`, tipografía monoespaciada. Completamente rediseñada respecto a la versión inicial.
+- **Gráficos interactivos**: combina matplotlib (PNG estático para reportes HTML) y Plotly (gráficos interactivos en pantalla).
+- **Diseño responsive**: ajustado para escritorio ancho (max 1440 px), tablet y móvil.
+
+En Docker, el dashboard se comunica con el receptor interno usando:
+
+```bash
+FINTECH_PIPELINE_API_URL=http://api:8000
+```
+
+En ejecución local sin Docker usa por defecto:
+
+```bash
+FINTECH_PIPELINE_API_URL=http://127.0.0.1:8000
+```
+
+---
+
 ## Seguridad
 
 ### Capa SQL (`src/agent/security.py`)
@@ -323,10 +352,10 @@ El agente tiene instrucciones explícitas:
 
 | Servicio | Propósito | Variables `.env` | Fallback |
 |----------|-----------|------------------|---------|
-| **Ollama** `localhost:11434` | LLM llama3.2 para el agente | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | Sin fallback — agente no arranca |
+| **Ollama** `localhost:11434` | LLM llama3.2 para el agente | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | Dashboard sigue; respuestas IA quedan limitadas |
 | **open.er-api.com** | Conversión COP → USD en Silver | `EXCHANGE_RATE_API_KEY` (opcional) | Rate fijo: `1/4150` |
 | **ip-api.com** | Geolocalización por IP pública | Sin clave (45 req/min) | Usa `location_city` del payload |
-| **AWS S3** | Almacena Parquets Silver/Gold | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME` | Pipeline funciona sin S3 |
+| **AWS S3** | Almacena Parquets Silver/Gold | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_BUCKET` | Pipeline funciona sin S3 |
 | **Databricks** Unity Catalog | SQL warehouse en producción | `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_HTTP_PATH` | DuckDB local en memoria |
 
 ---
@@ -387,9 +416,12 @@ curl http://localhost:8000/health
 ### Modo 3 — Dashboard + Agente IA
 
 ```bash
-# Requiere pipeline batch ejecutado + Ollama corriendo
+# Terminal 1: dashboard (requiere pipeline batch ejecutado + Ollama corriendo)
 streamlit run src/agent/app.py
 # Abre en: http://localhost:8501
+
+# Terminal 2 opcional: para que el botón "Ejecutar Silver/Gold" funcione en local
+uvicorn src.bus.api_receiver:app --port 8000 --reload
 ```
 
 ### Modo 4 — Docker (recomendado para despliegue)
@@ -400,14 +432,22 @@ Ver [docs/DOCKER_DEPLOY.md](docs/DOCKER_DEPLOY.md) para la guía completa. Resum
 # Build
 docker build -t fintech-pipeline:latest .
 
-# Dashboard
-docker compose --profile dashboard up -d
+# Dashboard + API receptor + API ecommerce
+docker compose --profile dashboard --profile api --profile ecommerce up -d dashboard api ecommerce
+
+# Accesos locales
+# Dashboard: http://localhost:8501
+# API receptor: http://localhost:8000/docs
+# API ecommerce: http://localhost:8001/docs
 
 # Pipeline one-shot
-docker compose --profile pipeline up pipeline
+docker compose --profile pipeline run --rm pipeline
 
-# Todo
-docker compose --profile dashboard --profile api --profile bus up -d
+# Bus streaming continuo
+docker compose --profile bus up -d bus
+
+# Desarrollo del dashboard con hot reload
+docker compose --profile dev up -d dashboard-dev
 ```
 
 ### Modo 5 — Nube (S3 + Databricks)
@@ -417,8 +457,11 @@ docker compose --profile dashboard --profile api --profile bus up -d
 # docs/AWS_S3_SETUP.md
 # docs/DATABRICKS_SETUP.md
 
-# Verificar conexiones
+# Verificar conexión Databricks
 python src/config/databricks_config.py
+
+# Smoke check cloud completo
+python scripts/verificar_cloud.py
 
 # Subida manual
 python -c "
@@ -428,25 +471,88 @@ subir_parquets('data/gold',   'gold')
 "
 ```
 
+### Modo 6 — CI/CD, Docker Hub y dominio público
+
+Ver [docs/CICD_DEPLOY.md](docs/CICD_DEPLOY.md) para el paso a paso completo.
+
+El flujo actual queda así:
+
+```text
+push a GitHub
+  ↓
+CI: ruff + tests unitarios + Docker build smoke
+  ↓
+CD: tests + build/push de imagen a Docker Hub
+  ↓
+self-hosted runner Windows
+  ↓
+docker compose recrea dashboard + api + ecommerce
+  ↓
+health check en http://127.0.0.1:8501
+```
+
+Para Windows local gratis se usa:
+
+- GitHub Actions como CI/CD.
+- Docker Hub como registry de imagen.
+- `C:\fintech_pipeline_deploy` como carpeta local de despliegue.
+- GitHub self-hosted runner con labels `self-hosted`, `Windows`, `X64`.
+- Docker Desktop corriendo en el equipo.
+
+Para publicar el dashboard fuera del computador local:
+
+- **ngrok**: recomendado para demo rápida y URL temporal.
+- **Cloudflare Tunnel**: recomendado para una URL más seria sin abrir puertos.
+- **DuckDNS**: subdominio gratis, pero requiere port forwarding y no sirve si tu red usa CGNAT.
+
+### Scripts operativos de verificación
+
+Estos scripts complementan pytest. Sirven como smoke checks manuales cuando quieres validar una corrida real, cloud o documentación:
+
+```bash
+python scripts/verificar_pipeline_completo.py
+python scripts/verificar_cloud.py
+python scripts/verificar_agente.py
+python scripts/verificar_documentacion.py
+```
+
 ---
 
 ## Tests
 
 ```bash
-# Todos los tests unitarios e integración local
-python -m pytest tests/unit tests/integration -v
+# Suite por defecto: excluye cloud, performance y e2e
+python -m pytest
 
-# Solo agente IA
-python -m pytest tests/unit/test_agent_routing.py tests/unit/test_agent_core_more.py -v
+# Lint
+ruff check src tests
+
+# Unitarios
+python -m pytest tests/unit -q
+
+# Integración local
+python -m pytest -m integration
+
+# Cobertura
+python -m pytest --cov --cov-report=term-missing --cov-report=xml
+
+# Cloud real: S3, ExchangeRate y Databricks (requiere .env válido)
+python -m pytest -m cloud
+
+# UI Streamlit sin navegador real
+python -m pytest tests/ui/test_dashboard_app.py -q
+
+# E2E de dashboard con Playwright
+python -m pytest -m e2e tests/ui/test_dashboard_smoke_playwright.py -v --browser chromium
 
 # Pruebas de mutación (críticas para seguridad y lógica de negocio)
 python tests/mutation/mutation_smoke.py
 
 # Benchmarks de rendimiento
-python -m pytest tests/performance -m performance
+python -m pytest -m performance --benchmark-only
 
-# Pruebas de carga (Locust)
-locust -f tests/load/locustfile.py --headless -u 10 -r 2 --run-time 60s
+# Pruebas de carga (requiere APIs locales en 8000 y 8001)
+locust -f tests/load/locustfile.py --host http://127.0.0.1:8001 --headless -u 20 -r 5 -t 2m
 ```
 
 **Cobertura de tests:**
@@ -461,6 +567,8 @@ locust -f tests/load/locustfile.py --headless -u 10 -r 2 --run-time 60s
 | `agent/schema.py` | unit |
 | `bus/` | integration, load (Locust) |
 | `ingesta/` | unit (moto S3) |
+| `agent/app.py` | UI smoke con Streamlit AppTest y E2E con Playwright |
+| `run_pipeline.py` | integration, performance benchmark |
 
 ---
 
@@ -527,10 +635,22 @@ fintech_pipeline_v3/
 │   │   └── locustfile.py          Pruebas de carga HTTP
 │   └── ui/                        Tests del dashboard Streamlit
 │
+├── scripts/
+│   ├── verificar_pipeline_completo.py
+│   ├── verificar_cloud.py
+│   ├── verificar_agente.py
+│   └── verificar_documentacion.py
+│
 ├── docs/
-│   ├── AWS_S3_SETUP.md            Guía configuración AWS S3/IAM
-│   ├── DATABRICKS_SETUP.md        Guía integración Databricks Unity Catalog
-│   └── DOCKER_DEPLOY.md           Guía dockerización y despliegue
+│   ├── AWS_S3_SETUP.md                    Guía configuración AWS S3/IAM
+│   ├── DATABRICKS_SETUP.md                Guía integración Databricks Unity Catalog
+│   ├── DOCKER_DEPLOY.md                   Guía dockerización y despliegue
+│   ├── CICD_DEPLOY.md                     CI/CD, Docker Hub, runner Windows y dominios
+│   └── AGENT_CONTROL_DETERMINISTICO.md    Especificación control determinístico del agente IA
+│
+├── .github/workflows/
+│   ├── ci.yml                     Ruff, tests unitarios y Docker build smoke
+│   └── cd.yml                     Build/push Docker Hub + deploy Windows local
 │
 ├── data/
 │   ├── raw/fintech_events_v4.json Dataset fuente — NO MODIFICAR
@@ -550,7 +670,9 @@ fintech_pipeline_v3/
 ├── .dockerignore                  Excluye venv, .env, tests de la imagen
 ├── .env.example                   Plantilla de variables de entorno
 ├── requirements.txt               Dependencias Python
-└── pytest.ini                     Configuración de tests
+├── pytest.ini                     Configuración de tests
+├── .coveragerc                    Configuración de cobertura
+└── sonar-project.properties       Configuración base para Sonar
 ```
 
 ---
@@ -568,6 +690,8 @@ fintech_pipeline_v3/
 | Moneda | COP (convertido a USD en Silver) |
 | Usuarios únicos | 489 en dataset base |
 
+La corrida base genera **489 usuarios en Gold**. Ese valor puede cambiar tras ingesta API/Locust porque el bus puede agregar nuevos eventos y recalcular Silver/Gold.
+
 ---
 
 ## Variables de Entorno
@@ -580,8 +704,9 @@ OLLAMA_MODEL=llama3.2
 # AWS S3
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
-AWS_DEFAULT_REGION=us-east-1
-S3_BUCKET_NAME=fintech-pipeline
+AWS_SESSION_TOKEN=...        # Opcional: solo si usas credenciales temporales
+AWS_REGION=us-east-1
+AWS_BUCKET=fintech-pipeline
 
 # DATABRICKS UNITY CATALOG
 DATABRICKS_HOST=dbc-xxxxxxxx.cloud.databricks.com
@@ -592,7 +717,16 @@ DATABRICKS_SCHEMA=fintech
 
 # APIs DE ENRIQUECIMIENTO (opcionales)
 EXCHANGE_RATE_API_KEY=...    # Fallback hardcodeado si no se configura
+
+# CONEXIÓN ENTRE SERVICIOS LOCALES / DOCKER
+FINTECH_PIPELINE_API_URL=http://127.0.0.1:8000
+FINTECH_RECEIVER_BASE_URL=http://127.0.0.1:8000
+
+# TESTS DEL DASHBOARD
+FINTECH_DASHBOARD_TEST_MODE=true
 ```
+
+En Docker Compose, `FINTECH_PIPELINE_API_URL` y `FINTECH_RECEIVER_BASE_URL` se configuran automáticamente con nombres internos de servicio (`http://api:8000`). En ejecución local manual puedes dejarlas apuntando a `127.0.0.1`.
 
 ---
 
@@ -619,9 +753,12 @@ EXCHANGE_RATE_API_KEY=...    # Fallback hardcodeado si no se configura
 | 5 | Agente IA — 11 tools, historial, gráficos inteligentes, alertas | Completa |
 | 6 | Dashboard Streamlit — 3 páginas, chat IA, reportes HTML | Completa |
 | 7 | AWS S3 — subida automática de Parquets | Implementado |
-| 8 | Databricks Unity Catalog — integración producción | Requiere credenciales |
-| 9 | Dockerización — Dockerfile, docker-compose con profiles | Documentado |
-| 10 | Tests — unit, integration, mutation, benchmark, load | Completa |
+| 8 | Databricks Unity Catalog — integración producción | Completa con credenciales válidas |
+| 9 | Dockerización — Dockerfile, docker-compose con profiles | Completa |
+| 10 | Tests — unit, integration, cloud, UI, e2e, mutation, benchmark, load | Completa |
+| 11 | CI — ruff, tests unitarios, Docker build smoke | Completa |
+| 12 | CD — Docker Hub + self-hosted runner Windows + health check | Completa |
+| 13 | Publicación externa — ngrok, Cloudflare Tunnel, DuckDNS | Documentada |
 
 ---
 
@@ -632,3 +769,6 @@ EXCHANGE_RATE_API_KEY=...    # Fallback hardcodeado si no se configura
 | [docs/AWS_S3_SETUP.md](docs/AWS_S3_SETUP.md) | Configuración IAM, bucket, políticas, subida manual y automática |
 | [docs/DATABRICKS_SETUP.md](docs/DATABRICKS_SETUP.md) | External Location, Unity Catalog, SQL warehouse, consultas desde el agente |
 | [docs/DOCKER_DEPLOY.md](docs/DOCKER_DEPLOY.md) | Dockerfile, docker-compose, perfiles de servicio, solución de problemas |
+| [docs/CICD_DEPLOY.md](docs/CICD_DEPLOY.md) | CI/CD, Docker Hub, self-hosted runner Windows/Linux y publicación con dominio/túnel |
+| [docs/AGENT_CONTROL_DETERMINISTICO.md](docs/AGENT_CONTROL_DETERMINISTICO.md) | Especificación del control determinístico del agente: intenciones, reglas, anti-alucinaciones y pruebas conversacionales |
+| [tests/README.md](tests/README.md) | Comandos detallados para unit, integration, cloud, performance, load, UI y mutation smoke |

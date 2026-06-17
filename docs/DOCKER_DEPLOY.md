@@ -175,13 +175,16 @@ CMD ["python", "-m", "streamlit", "run", "src/agent/app.py", \
 ```yaml
 # FINTECH PIPELINE V3 — Orquestación de servicios
 #
-# Perfiles disponibles:
-#   pipeline   → Bronze→Silver→Gold (one-shot)
-#   dashboard  → Streamlit en :8501
-#   api        → FastAPI receptor en :8000
-#   ecommerce  → FastAPI generador en :8001
-#   bus        → Streaming completo asyncio
-#   dev        → Dashboard con hot-reload (src/ montado en vivo)
+# Uso rápido:
+#   docker compose --profile pipeline  up pipeline               # Bronze→Silver→Gold
+#   docker compose --profile dashboard up -d                     # Dashboard Streamlit
+#   docker compose --profile api       up -d                     # API receptor eventos
+#   docker compose --profile api --profile ecommerce up -d api ecommerce  # APIs completas
+#   docker compose --profile bus       up -d                     # Bus streaming completo
+#
+# IMPORTANTE: Ollama corre en el HOST (no en Docker).
+#   Windows/Mac → host.docker.internal:11434  (resuelve automáticamente)
+#   Linux       → requiere extra_hosts host-gateway (ya incluido abajo)
 
 x-env-common: &env-common
   PYTHONUNBUFFERED: "1"
@@ -209,28 +212,48 @@ x-volumes-data: &volumes-data
 
 services:
 
+  # Pipeline batch (Bronze → Silver → Gold) — ejecución one-shot
   pipeline:
-    build: { context: ., dockerfile: Dockerfile }
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: fintech-pipeline:latest
     container_name: fintech-pipeline
     command: python src/run_pipeline.py
-    environment: { <<: [*env-common, *env-cloud] }
+    environment:
+      <<: [*env-common, *env-cloud]
     volumes: *volumes-data
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: "no"
-    profiles: [pipeline]
+    profiles:
+      - pipeline
 
+  # Dashboard Streamlit + Agente IA
   dashboard:
-    build: { context: ., dockerfile: Dockerfile }
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: fintech-pipeline:latest
     container_name: fintech-dashboard
-    command: ["python", "-m", "streamlit", "run", "src/agent/app.py",
-              "--server.port=8501", "--server.address=0.0.0.0",
-              "--server.headless=true", "--server.fileWatcherType=none"]
-    ports: ["8501:8501"]
-    environment: { <<: [*env-common, *env-cloud] }
+    command:
+      - python
+      - -m
+      - streamlit
+      - run
+      - src/agent/app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      - --server.headless=true
+      - --server.fileWatcherType=none
+    ports:
+      - "8501:8501"
+    environment:
+      <<: [*env-common, *env-cloud]
+      FINTECH_PIPELINE_API_URL: "http://api:8000"   # nombre de servicio interno
     volumes: *volumes-data
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
@@ -238,66 +261,126 @@ services:
       timeout: 10s
       start_period: 20s
       retries: 3
-    profiles: [dashboard]
+    profiles:
+      - dashboard
 
+  # API receptor de eventos (puerto 8000)
   api:
-    build: { context: ., dockerfile: Dockerfile }
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: fintech-pipeline:latest
     container_name: fintech-api
-    command: ["python", "-m", "uvicorn", "src.bus.api_receiver:app",
-              "--host=0.0.0.0", "--port=8000"]
-    ports: ["8000:8000"]
-    environment: { <<: *env-common }
+    command:
+      - python
+      - -m
+      - uvicorn
+      - src.bus.api_receiver:app
+      - --host=0.0.0.0
+      - --port=8000
+    ports:
+      - "8000:8000"
+    environment:
+      <<: [*env-common, *env-cloud]
     volumes: *volumes-data
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
-    profiles: [api]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    profiles:
+      - api
 
+  # API generadora de eventos (puerto 8001)
+  # Depende de api con condición service_healthy para evitar arrancar sin receptor
   ecommerce:
-    build: { context: ., dockerfile: Dockerfile }
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: fintech-pipeline:latest
     container_name: fintech-ecommerce
-    command: ["python", "-m", "uvicorn", "src.bus.ecommerce_api:app",
-              "--host=0.0.0.0", "--port=8001"]
-    ports: ["8001:8001"]
-    environment: { <<: *env-common }
+    command:
+      - python
+      - -m
+      - uvicorn
+      - src.bus.ecommerce_api:app
+      - --host=0.0.0.0
+      - --port=8001
+    ports:
+      - "8001:8001"
+    environment:
+      <<: *env-common
+      FINTECH_RECEIVER_BASE_URL: "http://api:8000"  # reenvía eventos al receptor
     volumes: *volumes-data
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
-    profiles: [ecommerce]
+    depends_on:
+      api:
+        condition: service_healthy
+    profiles:
+      - ecommerce
 
+  # Bus de streaming continuo
   bus:
-    build: { context: ., dockerfile: Dockerfile }
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: fintech-pipeline:latest
     container_name: fintech-bus
-    command: ["python", "src/bus/start_full_pipeline.py",
-              "--delay=0.05", "--batch-size=100",
-              "--flush-interval=15", "--trigger-interval=60", "--loop"]
-    environment: { <<: [*env-common, *env-cloud] }
+    command:
+      - python
+      - src/bus/start_full_pipeline.py
+      - --delay=0.05
+      - --batch-size=100
+      - --flush-interval=15
+      - --trigger-interval=60
+      - --loop
+    environment:
+      <<: [*env-common, *env-cloud]
     volumes: *volumes-data
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
-    profiles: [bus]
+    profiles:
+      - bus
 
-  # Perfil desarrollo: src/ montado como volumen → cambios sin rebuild
+  # Dashboard desarrollo (hot-reload: cambios en src/ sin rebuild)
   dashboard-dev:
-    build: { context: ., dockerfile: Dockerfile }
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: fintech-pipeline:latest
     container_name: fintech-dashboard-dev
-    command: ["python", "-m", "streamlit", "run", "src/agent/app.py",
-              "--server.port=8501", "--server.address=0.0.0.0",
-              "--server.headless=true", "--server.fileWatcherType=poll",
-              "--server.runOnSave=true"]
-    ports: ["8501:8501"]
-    environment: { <<: [*env-common, *env-cloud] }
+    command:
+      - python
+      - -m
+      - streamlit
+      - run
+      - src/agent/app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      - --server.headless=true
+      - --server.fileWatcherType=poll
+      - --server.runOnSave=true
+    ports:
+      - "8501:8501"
+    environment:
+      <<: [*env-common, *env-cloud]
     volumes:
       - ./src:/app/src        # src/ en vivo — cambios sin rebuild
       - ./data:/app/data
       - ./outputs:/app/outputs
       - ./logs:/app/logs
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
-    profiles: [dev]
+    profiles:
+      - dev
 ```
 
 ---
@@ -314,6 +397,7 @@ OLLAMA_MODEL=llama3.2
 # AWS S3
 AWS_ACCESS_KEY_ID=AKIAXXXXXXXXXXXXXXXX
 AWS_SECRET_ACCESS_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+AWS_SESSION_TOKEN=                       # Opcional: solo si usas credenciales temporales
 AWS_REGION=us-east-1
 AWS_BUCKET=tu-bucket-fintech
 
@@ -326,7 +410,17 @@ DATABRICKS_SCHEMA=fintech
 
 # APIs de enriquecimiento
 EXCHANGE_RATE_API_KEY=tu_clave_aqui
+
+# Conexión entre servicios (local sin Docker)
+# En Docker Compose estos valores se inyectan automáticamente con nombre de servicio interno
+FINTECH_PIPELINE_API_URL=http://127.0.0.1:8000
+FINTECH_RECEIVER_BASE_URL=http://127.0.0.1:8000
+
+# Tests del dashboard
+FINTECH_DASHBOARD_TEST_MODE=true
 ```
+
+> En Docker Compose, `FINTECH_PIPELINE_API_URL` y `FINTECH_RECEIVER_BASE_URL` se sobreescriben automáticamente por los nombres internos `http://api:8000`. En ejecución local sin Docker apuntan a `127.0.0.1`.
 
 ---
 
@@ -439,6 +533,38 @@ docker compose down --rmi local
 ---
 
 ## Solución de problemas frecuentes
+
+### Ecommerce no arranca (depende de api)
+
+`ecommerce` tiene `depends_on: api: condition: service_healthy`. Esto significa que Docker esperará a que el healthcheck de `api` pase antes de iniciar `ecommerce`. Si `api` tarda más de lo normal:
+
+```bash
+# Ver logs del api para diagnosticar
+docker compose logs -f api
+
+# Verificar que el healthcheck pase
+docker inspect fintech-api --format='{{.State.Health.Status}}'
+```
+
+Si necesitas levantar solo `api` primero:
+
+```bash
+docker compose --profile api up -d api
+# Esperar que esté healthy, luego:
+docker compose --profile ecommerce up -d ecommerce
+```
+
+### FINTECH_RECEIVER_BASE_URL no configurado
+
+Si `ecommerce` no puede reenviar eventos al receptor, verifica que `FINTECH_RECEIVER_BASE_URL` esté apuntando al nombre de servicio correcto:
+
+```bash
+# En Docker Compose debe ser:
+FINTECH_RECEIVER_BASE_URL=http://api:8000
+
+# En local sin Docker:
+FINTECH_RECEIVER_BASE_URL=http://127.0.0.1:8000
+```
 
 ### Ollama no responde desde el contenedor
 

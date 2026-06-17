@@ -245,5 +245,5 @@ jobs:
         shell: powershell
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
-          docker compose --profile pipeline run --rm --no-build pipeline
+          docker compose --profile pipeline run --rm pipeline
           docker compose ps

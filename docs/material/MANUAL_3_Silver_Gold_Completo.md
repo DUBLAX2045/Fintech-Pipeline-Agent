@@ -3,7 +3,8 @@
 
 > **Nivel:** Principiante con Fases 1 y 2 completadas
 > **Objetivo:** Implementar Silver, Gold y cerrar todos los entregables pendientes
-> **Última actualización:** Abril 2026
+> **Lenguaje:** Python 3.12
+> **Última actualización:** Junio 2026
 
 ---
 
@@ -100,9 +101,9 @@ Cada fila representa UN usuario con toda su información consolidada.
 | Columna | Tipo | Descripción | Fuente | Nota |
 |---|---|---|---|---|
 | `user_id` | string | Identificador único del usuario | Silver | PK |
-| `user_name` | string | Nombre del usuario | Silver | Primer valor registrado |
-| `user_email` | string | Email del usuario | Silver | Primer valor registrado |
-| `user_age` | int | Edad del usuario | Silver | Primer valor registrado |
+| `user_name` | string | Nombre del usuario | Silver | Primer valor registrado — PII filtrado en agente (security.py) |
+| `user_email` | string | Email del usuario | Silver | Primer valor registrado — PII filtrado en agente (security.py) |
+| `user_age` | int | Edad del usuario | Silver | Primer valor registrado — PII filtrado en agente (security.py) |
 | `user_segment` | string | Segmento: premium, student, family, young_professional | Silver | Primer valor registrado |
 | `city` | string | Ciudad registrada del usuario | Silver | Primer valor registrado |
 | `total_events` | int | Total de TODOS los eventos (incluye registros y actualizaciones) | Silver | COUNT(*) |
@@ -1296,16 +1297,16 @@ if __name__ == "__main__":
 
 ## 6. Verificación Final del Proyecto
 
-Crea `verificar_pipeline_completo.py` en la raíz del proyecto:
+Crea `scripts/verificar_pipeline_completo.py` (la ruta correcta en el proyecto es `scripts/`, no la raíz):
 
 ```python
-# verificar_pipeline_completo.py
+# scripts/verificar_pipeline_completo.py
 """
 Verifica que todas las capas del pipeline están correctas.
 Ejecutar después de src/run_pipeline.py.
 
 Uso:
-    python verificar_pipeline_completo.py
+    python scripts/verificar_pipeline_completo.py
 """
 
 import pandas as pd
@@ -1397,7 +1398,7 @@ if errores:
         print(f"   {e}")
 else:
     print("✅ TODAS LAS CAPAS VERIFICADAS CORRECTAMENTE")
-    print("   El pipeline está listo para la Fase 3 (Agente Inteligente)")
+    print("   El pipeline está listo para el Dashboard + Agente IA")
 print("=" * 60)
 ```
 
@@ -1405,14 +1406,14 @@ print("=" * 60)
 
 ## 7. Actualización del README
 
-Agrega estas secciones al final de tu `README.md`:
+Estado completo del proyecto (todas las fases terminadas):
 
 ```markdown
 ## ✅ Fase 1 — Análisis y Diseño (COMPLETADA)
 
 ### Entregables
 - [x] **1.1** Exploración del JSON — 2.000 eventos, 7 tipos, 489 usuarios únicos
-- [x] **1.2** Esquema Bronze→Silver — `/docs/schema_bronze_silver.md` (Manual 3)
+- [x] **1.2** Esquema Bronze→Silver — tabla de mapeo completa (Manual 3)
 - [x] **1.3** Métricas Gold — gold_user_360 con 21 columnas definidas (Manual 3)
 - [x] **1.4** Prueba de APIs — `notebooks/02_prueba_apis.py`
 - [x] **1.5** 10 preguntas del agente — documentadas en Manual 3
@@ -1434,7 +1435,7 @@ python src/run_pipeline.py
 python src/run_pipeline.py --desde-silver
 
 # Verificar todas las capas
-python verificar_pipeline_completo.py
+python scripts/verificar_pipeline_completo.py
 ```
 
 ### Datos del pipeline
@@ -1446,42 +1447,64 @@ python verificar_pipeline_completo.py
 | Gold daily | Por día | `data/gold/gold_daily_metrics.parquet` |
 | Gold summary | 7 tipos | `data/gold/gold_event_summary.parquet` |
 
-## ⏳ Fase 3 — Agente Inteligente (PRÓXIMA)
-- [ ] Text-to-SQL con Claude AI sobre gold_user_360
-- [ ] Responder las 10 preguntas del agente en lenguaje natural
-- [ ] Dashboard interactivo con Streamlit
+## ✅ Fase 3 — Agente IA + Dashboard (COMPLETADA)
+
+- [x] Agente IA con **Ollama llama3.2** (100% local, sin API externa)
+- [x] 11 herramientas `@tool`: SQL, gráficos, alertas, reporte HTML, S3, Databricks
+- [x] DuckDB como motor SQL local sobre Parquets Gold
+- [x] Databricks Unity Catalog como SQL warehouse de producción
+- [x] Dashboard ejecutivo Streamlit (tema oscuro, Plotly + matplotlib)
+- [x] Capa de seguridad: filtrado PII, bloqueo DDL/DML
+
+## ✅ Fase 4 — Docker + CI/CD + AWS S3 (COMPLETADA)
+
+- [x] Docker Compose con 6 perfiles: pipeline, dashboard, api, ecommerce, bus, dev
+- [x] GitHub Actions CD con self-hosted runner Windows (X64)
+- [x] Docker Buildx con caché GitHub Actions (type=gha)
+- [x] AWS S3 para almacenamiento de Parquets Gold
+- [x] Databricks Unity Catalog para queries de producción
 ```
 
 ---
 
-## Checklist Final — ¿Estás listo para Fase 3?
+## Checklist Final — Estado del Proyecto
 
 ```
-FASE 1 — ANÁLISIS Y DISEÑO
+FASE 1 — ANÁLISIS Y DISEÑO ✅
    [x] 1.1 JSON explorado (tipos, campos, nulos)
    [x] 1.2 Esquema Bronze→Silver documentado (tabla de mapeo completa)
    [x] 1.3 Métricas Gold definidas (21 columnas en gold_user_360)
    [x] 1.4 Notebook de prueba de APIs (notebooks/02_prueba_apis.py)
    [x] 1.5 10 preguntas del agente definidas
 
-FASE 2 — PIPELINE
+FASE 2 — PIPELINE MEDALLION ✅
    [x] 2.1 Capa Bronze (pipeline_bronze.py + simulador + bus de eventos)
    [x] 2.2 Capa Silver (pipeline_silver.py — 7 pasos documentados)
    [x] 2.3 Capa Gold (pipeline_gold.py — 3 tablas generadas)
-   [x] Script maestro (run_pipeline.py)
-   [x] Verificación completa (verificar_pipeline_completo.py)
+   [x] Script maestro (src/run_pipeline.py)
+   [x] Verificación completa (scripts/verificar_pipeline_completo.py)
 
-PREREQUISITO FASE 3
-   [ ] Ejecutar: python src/run_pipeline.py
-   [ ] Ejecutar: python verificar_pipeline_completo.py (sin errores)
-   [ ] Confirmar que data/gold/gold_user_360.parquet existe y tiene 489 filas
+FASE 3 — AGENTE IA + DASHBOARD ✅
+   [x] Ollama llama3.2 configurado (100% local)
+   [x] 11 herramientas @tool implementadas (src/agent/agent.py)
+   [x] DuckDB como SQL local sobre Parquets Gold
+   [x] Databricks Unity Catalog para producción
+   [x] Dashboard Streamlit tema oscuro (src/agent/app.py)
+   [x] Seguridad: PII filtrado, DDL/DML bloqueado (src/agent/security.py)
+
+FASE 4 — INFRAESTRUCTURA ✅
+   [x] Docker Compose (6 perfiles: pipeline, dashboard, api, ecommerce, bus, dev)
+   [x] GitHub Actions CD con self-hosted runner Windows
+   [x] Docker Buildx con caché GitHub Actions
+   [x] AWS S3 para almacenamiento Parquets Gold
+   [x] Databricks Unity Catalog para producción
 ```
 
-Cuando el checklist esté completamente marcado, **tienes el verde para Fase 3**.
+**Proyecto completamente terminado — todas las fases marcadas ✅**
 
 ---
 
 *Manual 3 — Cierre Silver, Gold y Entregables de Diseño*
 *Referencia: Databricks Medallion Architecture | open.er-api.com | ip-api.com*
-*Versión 1.0 — Abril 2026*
+*Versión 2.0 — Junio 2026*
 

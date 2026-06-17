@@ -91,6 +91,7 @@ services:
       - "8501:8501"
     environment:
       <<: [*env-common, *env-cloud]
+      FINTECH_PIPELINE_API_URL: "http://api:8000"
     volumes: *volumes-data
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -123,7 +124,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      <<: *env-common
+      <<: [*env-common, *env-cloud]
     volumes: *volumes-data
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -157,6 +158,7 @@ services:
       - "8001:8001"
     environment:
       <<: *env-common
+      FINTECH_RECEIVER_BASE_URL: "http://api:8000"
     volumes: *volumes-data
     extra_hosts:
       - "host.docker.internal:host-gateway"

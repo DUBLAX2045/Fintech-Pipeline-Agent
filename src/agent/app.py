@@ -11,6 +11,7 @@ Iniciar dashboard:
 """
 
 import sys
+import time
 from pathlib import Path
 
 # Paths para imports
@@ -34,7 +35,7 @@ st.set_page_config(
     page_title="Fintech 360 - Decision Console",
     page_icon="F",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 st.markdown("""
@@ -80,9 +81,146 @@ st.markdown("""
 
 /* ── Base ────────────────────────────────────────────────────────────────── */
 .stApp, .main { background:var(--bg) !important; color:var(--t1); }
-.block-container { padding-top:1.4rem !important; max-width:1440px !important; }
-[data-testid="stHeader"] { display:none !important; }
+.block-container {
+  padding:1.15rem 2.2rem 2rem !important;
+  max-width:1440px !important;
+}
+[data-testid="stHeader"] {
+  background:rgba(5,10,20,.82) !important;
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(16,185,129,.08);
+}
+#MainMenu,
+[data-testid="stAppDeployButton"],
+button[data-testid="stMainMenuButton"] {
+  display:none !important;
+}
+header[data-testid="stHeader"] div[data-testid="stToolbar"].stAppToolbar {
+  display:flex !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  width:100% !important;
+  height:100% !important;
+  pointer-events:auto !important;
+}
+header[data-testid="stHeader"] div[data-testid="stToolbar"] > div {
+  width:100% !important;
+  height:100% !important;
+}
+button[data-testid="stExpandSidebarButton"],
+section[data-testid="stSidebar"] button[data-testid="stBaseButton-headerNoPadding"] {
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  pointer-events:auto !important;
+  width:2rem !important;
+  height:2rem !important;
+  border-radius:6px !important;
+  color:var(--em-g) !important;
+  background:rgba(16,185,129,.08) !important;
+  border:1px solid rgba(16,185,129,.18) !important;
+  box-shadow:0 0 16px rgba(16,185,129,.08) !important;
+}
+button[data-testid="stExpandSidebarButton"] {
+  margin:.82rem 0 0 1rem !important;
+}
+button[data-testid="stExpandSidebarButton"]:hover,
+section[data-testid="stSidebar"] button[data-testid="stBaseButton-headerNoPadding"]:hover {
+  background:rgba(16,185,129,.14) !important;
+  border-color:rgba(16,185,129,.36) !important;
+}
 footer { display:none !important; }
+
+/* ── Navegacion principal persistente ───────────────────────────────────── */
+.top-nav-shell {
+  position:sticky;
+  top:.25rem;
+  z-index:40;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:.35rem 0 .15rem;
+  background:linear-gradient(180deg, rgba(5,10,20,.96), rgba(5,10,20,.72));
+  backdrop-filter:blur(14px);
+}
+.top-nav-copy {
+  display:flex;
+  flex-direction:column;
+  gap:.12rem;
+  min-width:0;
+}
+.top-nav-kicker {
+  font-family:var(--mono);
+  font-size:.62rem;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:#5a8a78;
+}
+.top-nav-title {
+  font-size:.9rem;
+  font-weight:700;
+  color:var(--t1);
+}
+div[data-testid="stRadio"] {
+  position:sticky;
+  top:2.35rem;
+  z-index:39;
+  background:rgba(5,10,20,.88);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(16,185,129,.08);
+  padding:0 0 .75rem;
+  margin-bottom:1.05rem;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  width:fit-content;
+  max-width:100%;
+  padding:.28rem;
+  background:rgba(255,255,255,.025);
+  border:1px solid rgba(16,185,129,.16);
+  border-radius:7px;
+  box-shadow:0 0 16px rgba(16,185,129,.06);
+}
+div[data-testid="stRadio"] label {
+  margin:0 !important;
+}
+div[data-testid="stRadio"] > label {
+  display:none !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] label {
+  min-height:34px;
+  padding:.36rem .68rem;
+  border-radius:5px;
+  border:1px solid transparent;
+  color:#7fb3a0 !important;
+  font-family:var(--mono);
+  font-size:.7rem;
+  transition:all .15s ease;
+}
+div[data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child,
+div[data-testid="stRadio"] label[data-baseweb="radio"] input {
+  display:none !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] label p {
+  color:#8ab8aa !important;
+  margin:0 !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] label:hover {
+  background:rgba(16,185,129,.08);
+  border-color:rgba(16,185,129,.18);
+}
+div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) {
+  background:rgba(16,185,129,.12);
+  border-color:rgba(16,185,129,.42);
+  color:var(--em-g) !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] label:has(input:checked) p {
+  color:var(--em-g) !important;
+}
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 section[data-testid="stSidebar"] {
@@ -222,9 +360,9 @@ section[data-testid="stSidebar"] .stButton:last-of-type [data-testid="baseButton
   flex-shrink:0;
 }
 .hero-h1 {
-  font-size:clamp(1.9rem,3vw,2.9rem);
+  font-size:2.65rem;
   font-weight:800;
-  letter-spacing:-.035em;
+  letter-spacing:0;
   line-height:1.0;
   color:var(--t1);
   margin:.25rem 0 .55rem;
@@ -309,6 +447,66 @@ section[data-testid="stSidebar"] .stButton:last-of-type [data-testid="baseButton
   border-radius:1px; flex-shrink:0;
 }
 
+.business-panel {
+  background:linear-gradient(135deg, rgba(16,185,129,.08), rgba(12,18,32,.94));
+  border:1px solid rgba(16,185,129,.18);
+  border-radius:7px;
+  padding:1rem 1.05rem;
+  margin:.25rem 0 1rem;
+  box-shadow:0 0 20px rgba(16,185,129,.08);
+}
+.business-title {
+  font-size:1rem;
+  font-weight:800;
+  color:var(--t1);
+  margin-bottom:.45rem;
+}
+.business-copy {
+  color:#8aa0b8;
+  font-size:.86rem;
+  line-height:1.55;
+  max-width:920px;
+}
+.discovery-grid {
+  display:grid;
+  grid-template-columns:repeat(5, minmax(150px, 1fr));
+  gap:.55rem;
+  margin-top:.85rem;
+}
+.discovery-item {
+  background:rgba(5,10,20,.48);
+  border:1px solid rgba(16,185,129,.12);
+  border-radius:6px;
+  padding:.68rem .72rem;
+  color:#b8c4d6;
+  font-size:.75rem;
+  line-height:1.42;
+}
+.discovery-item strong {
+  display:block;
+  color:var(--em-g);
+  font-family:var(--mono);
+  font-size:.58rem;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  margin-bottom:.24rem;
+}
+.insight-note {
+  background:rgba(5,10,20,.58);
+  border:1px solid rgba(16,185,129,.12);
+  border-left:3px solid var(--em);
+  border-radius:6px;
+  padding:.68rem .78rem;
+  margin:.58rem 0 .35rem;
+  color:#8aa0b8;
+  font-size:.76rem;
+  line-height:1.52;
+}
+.insight-note strong {
+  color:var(--t1);
+  font-weight:700;
+}
+
 /* ── Buttons (área principal) ────────────────────────────────────────────── */
 .stButton > button {
   border-radius:5px !important;
@@ -354,6 +552,54 @@ div[data-testid="stChatMessageContent"] code * { color:var(--em-g) !important; }
 [data-testid="stChatInput"] textarea:focus {
   border-color:var(--em) !important;
   box-shadow:0 0 0 2px rgba(16,185,129,.12) !important;
+}
+[data-testid="stBottom"] {
+  background:linear-gradient(180deg, rgba(5,10,20,0), rgba(5,10,20,.96) 18%, var(--bg) 100%) !important;
+}
+[data-testid="stBottom"] > div {
+  background:var(--bg) !important;
+  border-top:1px solid rgba(16,185,129,.10) !important;
+}
+[data-testid="stBottomBlockContainer"] {
+  background:transparent !important;
+}
+[data-testid="stChatInput"],
+[data-testid="stChatInput"] > div {
+  background:transparent !important;
+}
+[data-testid="stChatInput"] > div {
+  border:1px solid rgba(16,185,129,.18) !important;
+  border-radius:8px !important;
+  box-shadow:0 0 18px rgba(16,185,129,.08) !important;
+}
+[data-testid="stChatInput"] div[data-baseweb="textarea"],
+[data-testid="stChatInput"] div[data-baseweb="base-input"] {
+  background:var(--bg-1) !important;
+  color:var(--t1) !important;
+  border-color:rgba(16,185,129,.18) !important;
+}
+textarea[data-testid="stChatInputTextArea"] {
+  background:var(--bg-1) !important;
+  color:var(--t1) !important;
+  caret-color:var(--em-g) !important;
+  border:1px solid rgba(16,185,129,.18) !important;
+  box-shadow:none !important;
+}
+textarea[data-testid="stChatInputTextArea"]::placeholder {
+  color:#64748b !important;
+  opacity:1 !important;
+}
+textarea[data-testid="stChatInputTextArea"]::selection {
+  background:rgba(16,185,129,.36) !important;
+  color:#ffffff !important;
+}
+button[data-testid="stChatInputSubmitButton"] {
+  background:rgba(16,185,129,.12) !important;
+  color:var(--em-g) !important;
+}
+button[data-testid="stChatInputSubmitButton"]:disabled {
+  background:rgba(100,116,139,.12) !important;
+  color:rgba(148,163,184,.55) !important;
 }
 
 /* ── Expanders ───────────────────────────────────────────────────────────── */
@@ -476,6 +722,156 @@ div[data-testid="stMarkdownContainer"] p { color:var(--t2) !important; }
 .ms-label { font-family:var(--mono); font-size:.58rem; letter-spacing:.1em; text-transform:uppercase; color:#5d8a78; }
 .ms-value { font-family:var(--mono); font-size:1.25rem; font-weight:700; color:var(--t1); line-height:1.1; margin-top:.2rem; }
 .ms-sub   { font-family:var(--mono); font-size:.6rem; color:#4e7065; margin-top:.18rem; }
+
+/* ── Responsive product shell ───────────────────────────────────────────── */
+* { box-sizing:border-box; }
+.stMarkdown, .stMarkdown p, .stMarkdown div { overflow-wrap:anywhere; }
+img, canvas, svg { max-width:100%; }
+
+@media (max-width:1100px) {
+  .block-container {
+    padding:1rem 1.1rem 1.6rem !important;
+    max-width:100% !important;
+  }
+  div[data-testid="stHorizontalBlock"] {
+    flex-wrap:wrap !important;
+    gap:.8rem !important;
+  }
+  div[data-testid="column"] {
+    flex:1 1 280px !important;
+    min-width:min(100%, 280px) !important;
+  }
+  .discovery-grid {
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+  .kpi-card { min-height:118px; }
+  .hero-h1 {
+    font-size:2.15rem;
+    line-height:1.08;
+  }
+}
+
+@media (max-width:760px) {
+  .block-container {
+    padding:.75rem .78rem 1.3rem calc(.78rem + 42px) !important;
+  }
+  [data-testid="stHeader"] {
+    height:2.75rem !important;
+  }
+  .top-nav-shell {
+    top:.15rem;
+    padding:.2rem 0 .1rem;
+  }
+  div[data-testid="stRadio"] {
+    top:2.65rem;
+    padding-bottom:.55rem;
+    margin-bottom:.75rem;
+  }
+  div[data-testid="stRadio"] div[role="radiogroup"] {
+    width:100%;
+  }
+  div[data-testid="stRadio"] div[role="radiogroup"] label {
+    flex:1 1 calc(50% - .4rem);
+    justify-content:center;
+    text-align:center;
+    min-width:0;
+    padding:.42rem .42rem;
+  }
+  div[data-testid="column"] {
+    flex:1 1 100% !important;
+    min-width:100% !important;
+  }
+  section[data-testid="stSidebar"] {
+    min-width:min(92vw, 340px) !important;
+    max-width:min(92vw, 340px) !important;
+  }
+  .brand-lockup { padding:.7rem .1rem .8rem; }
+  .hero-wrap {
+    padding:.85rem 0 .95rem;
+    margin-bottom:.85rem;
+  }
+  .hero-h1 {
+    font-size:1.75rem;
+    line-height:1.1;
+  }
+  .hero-sub { font-size:.84rem; line-height:1.48; }
+  .hero-chip { font-size:.58rem; padding:.18rem .38rem; }
+  .section-heading {
+    margin-top:1rem;
+    font-size:.62rem;
+  }
+  .business-panel {
+    padding:.85rem .9rem;
+  }
+  .business-title {
+    font-size:.92rem;
+  }
+  .business-copy,
+  .insight-note {
+    font-size:.74rem;
+  }
+  .discovery-grid {
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:.45rem;
+  }
+  .kpi-card {
+    min-height:104px;
+    padding:.85rem .9rem;
+  }
+  .kpi-value { font-size:1.55rem; }
+  .mini-stat { padding:.72rem .78rem; }
+  [data-testid="stPlotlyChart"] {
+    width:100% !important;
+    overflow-x:auto;
+  }
+  .dt-th, .dt-td {
+    padding:.48rem .62rem;
+    font-size:.68rem;
+  }
+}
+
+@media (max-width:430px) {
+  .block-container { padding:.65rem .6rem 1.1rem calc(.6rem + 42px) !important; }
+  div[data-testid="stRadio"] div[role="radiogroup"] label {
+    flex:1 1 100%;
+  }
+  .top-nav-kicker { font-size:.56rem; }
+  .hero-h1 { font-size:1.55rem; }
+  .kpi-label, .kpi-detail, .ms-label, .ms-sub { font-size:.56rem; }
+}
+
+/* Sidebar colapsado: no dejar panel recortado, solo botón de reapertura */
+section[data-testid="stSidebar"][aria-expanded="false"] {
+  min-width:0 !important;
+  max-width:0 !important;
+  width:0 !important;
+  border-right:0 !important;
+  background:transparent !important;
+  overflow:visible !important;
+}
+section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarContent"],
+section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarUserContent"] {
+  display:none !important;
+  visibility:hidden !important;
+  min-width:0 !important;
+  max-width:0 !important;
+  width:0 !important;
+  padding:0 !important;
+  margin:0 !important;
+  overflow:hidden !important;
+}
+button[data-testid="stExpandSidebarButton"] {
+  position:relative !important;
+  z-index:1000 !important;
+}
+
+div[data-testid="stRadio"] label[data-baseweb="radio"] div[data-testid="stMarkdownContainer"] p {
+  color:#8ab8aa !important;
+}
+div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) div[data-testid="stMarkdownContainer"] p {
+  color:var(--em-g) !important;
+  font-weight:700 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -488,6 +884,7 @@ COLOR_INK       = "#e2e8f0"
 COLOR_MUTED     = "#64748b"
 OLLAMA_URL      = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2")
+PIPELINE_API_URL = os.getenv("FINTECH_PIPELINE_API_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
 def _render_agent_response(texto: str) -> None:
@@ -534,20 +931,66 @@ PREGUNTAS_SUGERIDAS = [
 
 
 # ── Estado de servicios ───────────────────────────────────────────────────────
-@st.cache_data(ttl=30)
+_PAGES = ["Centro de mando", "Mesa de analisis", "Sistema"]
+
+
+def _set_page(page: str) -> None:
+    if page in _PAGES:
+        st.session_state["pagina"] = page
+
+
+def _current_page() -> str:
+    page = st.session_state.get("pagina", _PAGES[0])
+    return page if page in _PAGES else _PAGES[0]
+
+
+def _render_main_navigation() -> str:
+    current = _current_page()
+    st.markdown(
+        """
+        <div class="top-nav-shell">
+          <div class="top-nav-copy">
+            <span class="top-nav-kicker">Panel de navegación</span>
+            <span class="top-nav-title">Vistas del dashboard</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    selected = st.radio(
+        "Vista del dashboard",
+        _PAGES,
+        index=_PAGES.index(current),
+        horizontal=True,
+        label_visibility="collapsed",
+        key=f"page_nav_{current.replace(' ', '_')}",
+    )
+    if selected != current:
+        _set_page(selected)
+        st.rerun()
+    return selected
+
+
+@st.cache_data(ttl=10)
 def _check_ollama() -> tuple[bool, str]:
     if _dashboard_test_mode():
         return True, "Modo test: Ollama omitido"
-    try:
-        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=4)
-        if r.status_code == 200:
-            modelos = [m["name"].split(":")[0] for m in r.json().get("models", [])]
-            if OLLAMA_MODEL.split(":")[0] in modelos:
-                return True, f"{OLLAMA_MODEL} disponible"
-            return False, f"Modelo '{OLLAMA_MODEL}' no encontrado. Ejecuta: ollama pull {OLLAMA_MODEL}"
-        return False, "Ollama responde pero con error"
-    except Exception:
-        return False, f"Ollama no responde en {OLLAMA_URL}. Inicia con: ollama serve"
+    modelo_esperado = OLLAMA_MODEL.split(":")[0]
+    ultimo_error = ""
+    for intento in range(3):
+        try:
+            r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=8)
+            if r.status_code == 200:
+                modelos = [m["name"].split(":")[0] for m in r.json().get("models", [])]
+                if modelo_esperado in modelos:
+                    return True, f"{OLLAMA_MODEL} disponible"
+                return False, f"Modelo '{OLLAMA_MODEL}' no encontrado. Ejecuta: ollama pull {OLLAMA_MODEL}"
+            ultimo_error = f"HTTP {r.status_code}"
+        except Exception as exc:
+            ultimo_error = str(exc)
+        if intento < 2:
+            time.sleep(0.6)
+    return False, f"Ollama no responde en {OLLAMA_URL}. Detalle: {ultimo_error or 'sin respuesta'}"
 
 
 @st.cache_data(ttl=60)
@@ -583,6 +1026,51 @@ def cargar_datos():
         else:
             dfs[key] = None
     return dfs["360"], dfs["daily"], dfs["events"]
+
+
+def _estado_pipeline_api() -> dict:
+    r = requests.get(f"{PIPELINE_API_URL}/pipeline/status", timeout=5)
+    r.raise_for_status()
+    return r.json()
+
+
+def _ejecutar_pipeline_gold_desde_api(timeout: int = 90) -> tuple[bool, str]:
+    """
+    Dispara Silver/Gold en el API receptor y espera a que el trigger termine.
+    Requiere que el servicio api este activo y que Bronze exista en data/bronze/events.
+    """
+    try:
+        antes = _estado_pipeline_api()
+        trigger_antes = antes.get("trigger", {})
+        runs_antes = int(trigger_antes.get("runs_completados", 0))
+        errores_antes = int(trigger_antes.get("errores", 0))
+
+        r = requests.post(f"{PIPELINE_API_URL}/pipeline/run", timeout=5)
+        r.raise_for_status()
+        payload = r.json()
+        if payload.get("status") not in {"triggered", "ya_en_ejecucion"}:
+            return False, f"Respuesta inesperada del API: {payload}"
+
+        limite = time.time() + timeout
+        ultimo = {}
+        while time.time() < limite:
+            time.sleep(2)
+            estado = _estado_pipeline_api()
+            trigger = estado.get("trigger", {})
+            ultimo = trigger
+            if trigger.get("activo_ahora"):
+                continue
+
+            runs = int(trigger.get("runs_completados", 0))
+            errores = int(trigger.get("errores", 0))
+            if runs > runs_antes:
+                return True, f"Gold actualizado correctamente desde {PIPELINE_API_URL}"
+            if errores > errores_antes:
+                return False, "El pipeline fallo. Revisa logs de fintech-api."
+
+        return False, f"El pipeline no termino antes de {timeout}s. Ultimo estado: {ultimo}"
+    except Exception as exc:
+        return False, f"No se pudo ejecutar el pipeline desde {PIPELINE_API_URL}: {exc}"
 
 
 def _fig(figsize=(6, 4)):
@@ -743,6 +1231,80 @@ def _section(title: str) -> None:
     st.markdown(f'<div class="section-heading">{title}</div>', unsafe_allow_html=True)
 
 
+def _business_intro() -> None:
+    st.markdown(
+        """
+        <div class="business-panel">
+          <div class="business-title">Qué puedes descubrir aquí</div>
+          <div class="business-copy">
+            Esta pantalla traduce pagos, compras, transferencias y recargas en señales de negocio:
+            quién mueve más dinero, dónde se concentra la actividad y qué fricciones pueden afectar crecimiento o retención.
+          </div>
+          <div class="discovery-grid">
+            <div class="discovery-item"><strong>Segmentos</strong>Grupos que generan más volumen.</div>
+            <div class="discovery-item"><strong>Ciudades</strong>Zonas con mayor adopción.</div>
+            <div class="discovery-item"><strong>Canales</strong>App, web u otros puntos preferidos.</div>
+            <div class="discovery-item"><strong>Fallos</strong>Fricciones que pierden transacciones.</div>
+            <div class="discovery-item"><strong>Retención</strong>Perfiles que conviene cuidar.</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _analysis_intro() -> None:
+    st.markdown(
+        """
+        <div class="business-panel">
+          <div class="business-title">Qué puede responder el agente</div>
+          <div class="business-copy">
+            Esta mesa conversa con los datos consolidados de usuarios fintech. Puede explicar
+            comportamiento de pagos, compras, transferencias, recargas, segmentos, ciudades,
+            canales, comercios, fallos e inactividad. Primero consulta datos reales y luego
+            redacta una respuesta según el nivel de explicación que elijas.
+          </div>
+          <div class="discovery-grid">
+            <div class="discovery-item"><strong>Resumen</strong>Qué está pasando en la plataforma.</div>
+            <div class="discovery-item"><strong>Comparación</strong>Segmentos, ciudades o canales frente a frente.</div>
+            <div class="discovery-item"><strong>Gráficas</strong>Visuales con interpretación de negocio.</div>
+            <div class="discovery-item"><strong>Riesgos</strong>Fallos, inactividad o señales de abandono.</div>
+            <div class="discovery-item"><strong>Decisiones</strong>Campañas, soporte o crecimiento.</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _analysis_response_mode() -> str:
+    _section("Nivel de explicación")
+    modo_label = st.segmented_control(
+        "Elige cómo quieres que responda el agente",
+        ["Profesional financiero", "Explicación clara"],
+        default="Profesional financiero",
+        key="analysis_response_mode",
+    )
+    if modo_label == "Explicación clara":
+        _insight_note(
+            "Modo claro:",
+            "el agente conserva la estructura ejecutiva, pero define conceptos, usa ejemplos cotidianos y explica qué significa cada cifra para una persona no financiera.",
+        )
+        return "claro"
+    _insight_note(
+        "Modo profesional:",
+        "el agente responde con lenguaje ejecutivo, comparaciones financieras, brechas entre métricas y recomendaciones orientadas a toma de decisiones.",
+    )
+    return "profesional"
+
+
+def _insight_note(title: str, text: str) -> None:
+    st.markdown(
+        f'<div class="insight-note"><strong>{title}</strong> {text}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════════
@@ -770,20 +1332,27 @@ with st.sidebar:
 
     st.markdown('<span class="sidebar-label">Navegación</span>', unsafe_allow_html=True)
 
-    _PAGES = ["Centro de mando", "Mesa de analisis", "Sistema"]
     if "pagina" not in st.session_state:
         st.session_state["pagina"] = _PAGES[0]
 
     for _p in _PAGES:
         _active = st.session_state["pagina"] == _p
         if st.button(_p, use_container_width=True, type="primary" if _active else "secondary", key=f"nav_{_p}"):
-            st.session_state["pagina"] = _p
+            _set_page(_p)
             st.rerun()
 
-    pagina = st.session_state["pagina"]
-
     st.markdown('<span class="sidebar-label" style="margin-top:.8rem;">Datos</span>', unsafe_allow_html=True)
-    if st.button("↺  Recargar Gold", use_container_width=True, type="secondary"):
+    if st.button("Ejecutar Silver/Gold", use_container_width=True, type="primary"):
+        with st.spinner("Ejecutando pipeline..."):
+            ok_pipeline, msg_pipeline = _ejecutar_pipeline_gold_desde_api()
+        if ok_pipeline:
+            st.success(msg_pipeline)
+            st.cache_data.clear()
+            st.rerun()
+        else:
+            st.error(msg_pipeline)
+
+    if st.button("↺  Recargar vista Gold", use_container_width=True, type="secondary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -791,6 +1360,8 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════════════════
 # PÁGINA: DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
+pagina = _render_main_navigation()
+
 if pagina == "Centro de mando":
 
     # ── Skeleton mientras cargan los datos ────────────────────────────────
@@ -798,8 +1369,8 @@ if pagina == "Centro de mando":
     with _ph.container():
         _hero(
             "Pulso <em>financiero</em> de usuarios",
-            "Vista ejecutiva sobre la capa Gold: comportamiento, volumen, fallas y preferencias consolidadas por usuario.",
-            ["Gold activo", "Visión 360", "S3 + Databricks", "Near real-time"],
+            "Convierte eventos de pagos, compras, transferencias y recargas en una vista clara para entender cómo se comportan los usuarios, dónde hay oportunidades de crecimiento y qué fallas afectan la experiencia financiera.",
+            ["Usuarios consolidados", "Pagos y compras", "Riesgo de fallos", "Oportunidades de crecimiento"],
         )
         _skeleton_dashboard()
 
@@ -809,8 +1380,8 @@ if pagina == "Centro de mando":
     # ── Hero ──────────────────────────────────────────────────────────────
     _hero(
         "Pulso <em>financiero</em> de usuarios",
-        "Vista ejecutiva sobre la capa Gold: comportamiento, volumen, fallas y preferencias consolidadas por usuario.",
-        ["Gold activo", "Visión 360", "S3 + Databricks", "Near real-time"],
+        "Convierte eventos de pagos, compras, transferencias y recargas en una vista clara para entender cómo se comportan los usuarios, dónde hay oportunidades de crecimiento y qué fallas afectan la experiencia financiera.",
+        ["Usuarios consolidados", "Pagos y compras", "Riesgo de fallos", "Oportunidades de crecimiento"],
     )
 
     if df_360 is None:
@@ -835,6 +1406,8 @@ if pagina == "Centro de mando":
         st.warning("Los filtros no devuelven datos. Ajusta los criterios.")
         st.stop()
 
+    _business_intro()
+
     # ── Pre-cómputos ──────────────────────────────────────────────────────
     vol       = df_360["total_amount_cop"].sum() / 1_000_000
     ticket    = df_360["avg_ticket"].mean()
@@ -853,6 +1426,10 @@ if pagina == "Centro de mando":
         _metric_card("Ticket promedio", f"${ticket:,.0f}", "Promedio por usuario activo", "amber")
     with k4:
         _metric_card("Tasa de fallo", f"{fallo:.1f}%", "Fricción transaccional media", "coral")
+    _insight_note(
+        "Cómo leer estos indicadores:",
+        "si el volumen crece pero la tasa de fallo también sube, la plataforma puede estar vendiendo más mientras pierde experiencia de usuario. El ticket promedio ayuda a diferenciar usuarios de alto valor frente a usuarios de actividad baja.",
+    )
 
     # ── Fila 1: Volumen por segmento (60%) + mini-stats + Donut canal (40%) ──
     _section("Panorama de mercado")
@@ -873,6 +1450,10 @@ if pagina == "Centro de mando":
         ))
         fig.update_layout(**_pl(showlegend=False, xaxis={**_XAXIS, "title": "Millones COP"}, yaxis=_YAXIS, height=260))
         _plotly(fig)
+        _insight_note(
+            "Panorama de mercado:",
+            "esta gráfica muestra qué segmentos concentran mayor volumen de dinero. Si un segmento domina demasiado, puede ser una gran oportunidad comercial, pero también un riesgo de dependencia.",
+        )
 
     with col_side:
         st.markdown(
@@ -907,6 +1488,10 @@ if pagina == "Centro de mando":
             margin=dict(l=0, r=0, t=6, b=30),
         ))
         _plotly(fig2)
+        _insight_note(
+            "Canal preferido:",
+            "esta distribución revela por dónde prefieren operar los usuarios. Si un canal domina, conviene optimizar esa experiencia antes de invertir en canales con menor adopción.",
+        )
 
     # ── Fila 2: Comercios (65%) + Ciudad (35%) ────────────────────────────
     _section("Alianzas y distribución geográfica")
@@ -929,6 +1514,10 @@ if pagina == "Centro de mando":
         ))
         fig3.update_layout(**_pl(showlegend=False, xaxis={**_XAXIS, "title": "Usuarios"}, yaxis=_YAXIS, height=320))
         _plotly(fig3)
+        _insight_note(
+            "Comercios principales:",
+            "los comercios más repetidos ayudan a identificar alianzas, beneficios o campañas que pueden aumentar uso y fidelización.",
+        )
 
     with col_city:
         datos_c = df_360.groupby("city")["user_id"].count().sort_values(ascending=False)
@@ -944,6 +1533,10 @@ if pagina == "Centro de mando":
         ))
         fig4.update_layout(**_pl(showlegend=False, xaxis=_XAXIS, yaxis={**_YAXIS, "title": "Usuarios"}, height=320))
         _plotly(fig4)
+        _insight_note(
+            "Ciudad principal:",
+            "la ciudad con mayor concentración de usuarios puede servir para priorizar campañas, soporte operativo, alianzas locales o expansión comercial.",
+        )
 
     # ── Fila 3: Serie temporal full-width ─────────────────────────────────
     if df_daily is not None and "date" in df_daily.columns and "total_transactions" in df_daily.columns:
@@ -975,6 +1568,10 @@ if pagina == "Centro de mando":
             height=240,
         ))
         _plotly(fig5)
+        _insight_note(
+            "Ritmo operativo:",
+            "la tendencia diaria permite detectar caídas o picos de actividad. Un cambio brusco puede indicar campaña exitosa, fricción técnica o variación en hábitos de uso.",
+        )
 
     # ── Fila 4: Top 15 perfiles — tabla styled ────────────────────────────
     _section("Top 15 — Perfiles de mayor volumen")
@@ -990,6 +1587,10 @@ if pagina == "Centro de mando":
         {"key": "failure_rate",      "label": "Fallo %",     "fmt": "{:.1%}",   "accent": "coral"},
         {"key": "preferred_channel", "label": "Canal",       "fmt": "{}",       "accent": "none"},
     ])
+    _insight_note(
+        "Perfiles de mayor volumen:",
+        "esta tabla ayuda a ubicar usuarios o grupos de alto valor sin exponer datos personales. Es útil para retención, atención prioritaria o análisis de comportamiento.",
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -998,8 +1599,8 @@ if pagina == "Centro de mando":
 elif pagina == "Mesa de analisis":
     _hero(
         "Mesa de analisis conversacional",
-        "Haz preguntas de negocio sobre la capa Gold. Las metricas se calculan desde datos reales antes de redactar la respuesta.",
-        ["KPIs auditables", "DuckDB local", "Databricks disponible", f"Modelo: {OLLAMA_MODEL}"],
+        "Pregúntale a la plataforma qué está pasando con los usuarios, pagos, compras, transferencias, fallos y oportunidades. El agente consulta datos reales antes de explicar la respuesta.",
+        ["Datos reales", "Modo financiero", "Modo claro", "Gráficas explicadas"],
     )
 
     if not ollama_ok:
@@ -1012,10 +1613,13 @@ elif pagina == "Mesa de analisis":
         )
         st.stop()
 
+    _analysis_intro()
+    modo_respuesta = _analysis_response_mode()
+
     # Preguntas sugeridas
     _section("Acciones rápidas")
     st.markdown(
-        '<p style="font-family:var(--mono);font-size:.72rem;color:var(--t3);margin-bottom:.6rem;">Elige una pregunta de negocio o escribe una propia.</p>',
+        '<p style="font-family:var(--mono);font-size:.72rem;color:var(--t3);margin-bottom:.6rem;">Elige una pregunta o escribe una propia. El agente adaptará el lenguaje al modo seleccionado.</p>',
         unsafe_allow_html=True,
     )
     cols = st.columns(2)
@@ -1047,7 +1651,7 @@ elif pagina == "Mesa de analisis":
             with st.spinner("Consultando datos..."):
                 try:
                     from agent.agent import agent_query
-                    respuesta = agent_query(query)
+                    respuesta = agent_query(query, modo_respuesta=modo_respuesta)
                 except Exception as e:
                     respuesta = f"Error del analista: {e}"
             _render_agent_response(respuesta)
@@ -1064,7 +1668,7 @@ elif pagina == "Mesa de analisis":
             contenedor = st.empty()
             texto_acumulado = ""
             try:
-                for chunk in stream_agent_query(prompt):
+                for chunk in stream_agent_query(prompt, modo_respuesta=modo_respuesta):
                     texto_acumulado += chunk
                     if "✅ Gráfico guardado:" not in texto_acumulado:
                         contenedor.markdown(texto_acumulado + "▌")
